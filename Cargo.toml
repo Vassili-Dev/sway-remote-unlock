@@ -1,0 +1,25 @@
+[package]
+name = "remote_unlock"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "remote_unlock_lib"
+path = "src/shared/lib.rs"
+
+[[bin]]
+name = "server"
+path = "src/server/main.rs"
+
+[[bin]]
+name = "cli"
+path = "src/cli/main.rs"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4.33"
+clap = { version = "4.4.18", features = ["derive"] }
+httparse = "1.8.0"
+rand = "0.8.5"
+serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0.113"
