@@ -34,6 +34,35 @@ impl std::fmt::Display for CodeBufferFullError {
 }
 
 impl Error for CodeBufferFullError {}
+
+#[derive(Debug)]
+pub struct OversizePacketError;
+
+impl std::fmt::Display for OversizePacketError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "RemoteUnlock -- OversizePacketError: Packet is too large"
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct ServerError {
+    msg: String,
+}
+
+impl ServerError {
+    pub fn new(msg: String) -> ServerError {
+        ServerError { msg }
+    }
+}
+
+impl std::fmt::Display for ServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "RemoteUnlock -- ServerError: {}", self.msg)
+    }
+}
 // #[derive(Debug)]
 // pub struct ServerError {
 //     msg: String,
@@ -59,6 +88,8 @@ impl Error for CodeBufferFullError {}
 pub enum RemoteUnlockError {
     SocketError(SocketError),
     CodeBufferFullError(CodeBufferFullError),
+    OversizePacketError(OversizePacketError),
+    ServerError(ServerError),
 }
 
 impl Display for RemoteUnlockError {
@@ -66,6 +97,8 @@ impl Display for RemoteUnlockError {
         match self {
             RemoteUnlockError::SocketError(e) => write!(f, "RemoteUnlock -- {}", e),
             RemoteUnlockError::CodeBufferFullError(e) => write!(f, "RemoteUnlock -- {}", e),
+            RemoteUnlockError::OversizePacketError(e) => write!(f, "RemoteUnlock -- {}", e),
+            RemoteUnlockError::ServerError(e) => write!(f, "RemoteUnlock -- {}", e),
         }
     }
 }
@@ -79,6 +112,18 @@ impl From<SocketError> for RemoteUnlockError {
 impl From<CodeBufferFullError> for RemoteUnlockError {
     fn from(err: CodeBufferFullError) -> RemoteUnlockError {
         RemoteUnlockError::CodeBufferFullError(err)
+    }
+}
+
+impl From<OversizePacketError> for RemoteUnlockError {
+    fn from(err: OversizePacketError) -> RemoteUnlockError {
+        RemoteUnlockError::OversizePacketError(err)
+    }
+}
+
+impl From<ServerError> for RemoteUnlockError {
+    fn from(err: ServerError) -> RemoteUnlockError {
+        RemoteUnlockError::ServerError(err)
     }
 }
 

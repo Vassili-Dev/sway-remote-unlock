@@ -1,8 +1,9 @@
-use chrono::{Duration, Utc};
+use chrono::{Duration, TimeZone, Utc};
+use core::fmt::Display;
 use rand::prelude::*;
 
 // 30 minutes
-const CODE_LIFETIME: Duration = Duration::milliseconds(30 * 1000);
+const CODE_LIFETIME: Duration = Duration::milliseconds(30 * 60 * 1000);
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct EnrollmentCode {
@@ -23,7 +24,15 @@ impl EnrollmentCode {
         Utc::now().timestamp() > self.expires
     }
 
-    pub fn verify(&self, code: u32) -> bool {
-        !self.expired() && self.code == code
+    pub fn verify(&self, code: &u32) -> bool {
+        !self.expired() && self.code == *code
+    }
+}
+
+impl Display for EnrollmentCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // Calculate expiry time
+        let expires = Utc.timestamp_opt(self.expires, 0).unwrap();
+        write!(f, "Code: {}\nExpires: {}", self.code, expires)
     }
 }

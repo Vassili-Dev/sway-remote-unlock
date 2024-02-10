@@ -1,7 +1,8 @@
 use std::io::Write;
 
-pub struct Response {
-    pub status: u16,
+pub struct Request {
+    pub path: Option<&'static str>,
+    pub method: Option<&'static str>,
     pub headers: [httparse::Header<'static>; 16],
     pub body: [u8; 1024],
 
@@ -11,7 +12,7 @@ pub struct Response {
     num_headers: usize,
 }
 
-impl Write for Response {
+impl Write for Request {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let remaining = self.body.len() - self.body_written;
         let write_amt = std::cmp::min(remaining, buf.len());
@@ -28,10 +29,11 @@ impl Write for Response {
     }
 }
 
-impl Response {
-    fn new() -> Response {
-        Response {
-            status: 200,
+impl Request {
+    pub fn new() -> Request {
+        Request {
+            path: None,
+            method: None,
             headers: [httparse::EMPTY_HEADER; 16],
             body: [0; 1024],
             body_len: 0,
@@ -49,5 +51,24 @@ impl Response {
                 return;
             }
         }
+    }
+
+    pub fn to_writer(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        let path = self.path.unwrap_or("/");
+        let method = self.method.unwrap_or("GET");
+
+        writer.write_fmt(format_args!("{} {} HTTP/1.1\r\n", method, path))?;
+        for header in self.headers.iter().take(self.num_headers) {
+            writer.write_fmt(format_args!(
+                "{}: {}\r\n",
+                header.name,
+                String::from_utf8_lossy(header.value)
+            ))?;
+        }
+        // Write content length
+        writer.write_fmt(format_args!("Content-Length: {}\r\n", self.body_written))?;
+        writer.write(b"\r\n")?;
+        writer.write(&self.body[..self.body_written])?;
+        Ok(())
     }
 }

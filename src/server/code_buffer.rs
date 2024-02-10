@@ -38,7 +38,7 @@ impl CodeBuffer {
     }
 
     // Verifies and removes the code from the buffer if it is valid
-    pub fn verify(&mut self, code: u32) -> bool {
+    pub fn verify(&mut self, code: &u32) -> bool {
         let found = self.codes.iter_mut().find(|code_opt| match code_opt {
             Some(c) => c.verify(code),
             None => false,

@@ -1,11 +1,17 @@
-// use clap::Parser;
-
-// #[derive(Parser, Debug)]
-// #[command(author, version, about, long_about = None)]
-// struct Args {
-//     #
-// }
+mod args;
+mod commands;
+use args::{Cli, Command};
+use clap::Parser;
+use remote_unlock_lib::config::Config;
 
 fn main() {
-    println!("Hello, world!");
+    let config = Config::new();
+    let args = Cli::parse();
+
+    match args.command {
+        Command::BeginEnroll(_) => {
+            commands::begin_enroll(&config).unwrap();
+        }
+        Command::Terminate(_) => {}
+    }
 }

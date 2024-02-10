@@ -1,0 +1,109 @@
+use core::fmt::{self, Debug};
+use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
+use serde::ser::{Serialize, Serializer};
+
+#[derive(Debug, Clone, Copy)]
+pub struct ByteArray<const N: usize> {
+    data: [u8; N],
+    length: usize,
+}
+
+impl<const N: usize> ByteArray<N> {
+    pub fn new() -> Self {
+        ByteArray {
+            data: [0; N],
+            length: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data[..self.length]
+    }
+
+    pub fn new_from_slice(slice: &[u8]) -> Self {
+        let mut data = [0; N];
+        data[..slice.len()].copy_from_slice(slice);
+        ByteArray {
+            data,
+            length: slice.len(),
+        }
+    }
+
+    pub fn copy_from_slice(&mut self, slice: &[u8]) {
+        self.data[..slice.len()].copy_from_slice(slice);
+        self.length = slice.len();
+    }
+}
+
+struct ByteArrayVisitor<const N: usize>;
+
+impl<'de, const N: usize> Visitor<'de> for ByteArrayVisitor<N> {
+    type Value = ByteArray<N>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "a byte array of length <= {}", N)
+    }
+
+    fn visit_seq<V>(self, mut seq: V) -> Result<ByteArray<N>, V::Error>
+    where
+        V: SeqAccess<'de>,
+    {
+        let mut bytes = [0; N];
+        let mut length = N;
+
+        for (idx, byte) in bytes.iter_mut().enumerate() {
+            match seq.next_element::<u8>()? {
+                Some(b) => *byte = b,
+                None => {
+                    // Null terminate the string
+                    *byte = b'\0';
+                    length = idx;
+                    break;
+                }
+            }
+        }
+        Ok(ByteArray {
+            data: bytes,
+            length,
+        })
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<ByteArray<N>, E>
+    where
+        E: Error,
+    {
+        let mut bytes = [0; N];
+        bytes[..v.len()].copy_from_slice(v);
+        let length = v.len();
+
+        Ok(ByteArray {
+            data: bytes,
+            length,
+        })
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<ByteArray<N>, E>
+    where
+        E: Error,
+    {
+        self.visit_bytes(v.as_bytes())
+    }
+}
+
+impl<'de, const N: usize> Deserialize<'de> for ByteArray<N> {
+    fn deserialize<D>(deserializer: D) -> Result<ByteArray<N>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_bytes(ByteArrayVisitor::<N>)
+    }
+}
+
+impl<const N: usize> Serialize for ByteArray<N> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(&self.data[..self.length])
+    }
+}
