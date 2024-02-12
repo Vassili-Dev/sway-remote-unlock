@@ -20,6 +20,10 @@ impl<const N: usize> ByteArray<N> {
         &self.data[..self.length]
     }
 
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.data[..self.length]
+    }
+
     pub fn new_from_slice(slice: &[u8]) -> Self {
         let mut data = [0; N];
         data[..slice.len()].copy_from_slice(slice);
@@ -27,6 +31,9 @@ impl<const N: usize> ByteArray<N> {
             data,
             length: slice.len(),
         }
+    }
+    pub fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.data[..self.length]).unwrap()
     }
 
     pub fn copy_from_slice(&mut self, slice: &[u8]) {
