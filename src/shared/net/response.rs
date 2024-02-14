@@ -4,7 +4,7 @@ use crate::{
 };
 
 use super::{headers::Header, status::Status};
-use std::{io::Read, io::Write, os::unix::net::UnixStream};
+use std::io::Write;
 
 #[derive(Debug)]
 pub struct Response {
@@ -95,7 +95,7 @@ impl Response {
         Ok(())
     }
 
-    pub fn from_stream(stream: &mut UnixStream) -> Result<Response, RemoteUnlockError> {
+    pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Response, RemoteUnlockError> {
         let mut ret = Response::new();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;

@@ -1,6 +1,7 @@
 use remote_unlock_lib::config::Config;
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
 use remote_unlock_lib::errors::{RemoteUnlockError, ServerError};
+use remote_unlock_lib::helper_types::ByteArray;
 use remote_unlock_lib::net::request::Request;
 use remote_unlock_lib::net::response::Response;
 use remote_unlock_lib::net::status::Status;
@@ -9,8 +10,8 @@ use std::os::unix::net::UnixStream;
 pub fn begin_enroll(config: &Config) -> Result<(), RemoteUnlockError> {
     let mut stream = UnixStream::connect(config.socket_path()).unwrap();
     let mut req = Request::new();
-    req.method = Some("POST");
-    req.path = Some("/begin_enroll");
+    req.method = Some(ByteArray::new_from_slice("POST".as_bytes()));
+    req.path = Some(ByteArray::new_from_slice("/begin_enroll".as_bytes()));
 
     req.to_writer(&mut stream).unwrap();
     stream.shutdown(Shutdown::Write).unwrap();
