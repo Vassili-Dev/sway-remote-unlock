@@ -8,10 +8,10 @@ use crate::{
 
 use super::headers::Header;
 
-pub struct Request {
+pub struct Request<const HV: usize = 64> {
     pub path: Option<ByteArray<128>>,
     pub method: Option<ByteArray<16>>,
-    pub headers: [Option<Header>; 16],
+    pub headers: [Option<Header<32, HV>>; 16],
     pub body: [u8; 1024 * 2],
 
     pub body_len: usize,

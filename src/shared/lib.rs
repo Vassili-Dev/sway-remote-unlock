@@ -7,3 +7,4 @@ pub mod helper_types;
 pub mod messages;
 pub mod net;
 pub mod pubkey;
+pub mod unlock_request;

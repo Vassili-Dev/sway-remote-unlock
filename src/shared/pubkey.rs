@@ -1,13 +1,8 @@
 use std::path::Path;
 
 use super::helper_types::ByteArray;
+use dryoc::sign::PublicKey;
 use serde::{Deserialize, Serialize};
-
-pub enum Algorithm {
-    RSA,
-    ECDSA,
-    ED25519,
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Pubkey {
@@ -35,23 +30,13 @@ impl Pubkey {
 
         std::fs::write(file_path, self.raw.as_bytes()).unwrap();
     }
+}
 
-    pub fn algorithm(&self) -> Algorithm {
-        let algo_bytes = self
-            .raw
-            .as_bytes()
-            .split(|byte| *byte == b' ')
-            .next()
-            .unwrap();
+impl Into<PublicKey> for &Pubkey {
+    fn into(self) -> PublicKey {
+        let mut ret = PublicKey::new();
+        ret.copy_from_slice(&self.raw.as_bytes());
 
-        if algo_bytes.starts_with(b"ssh-rsa") {
-            Algorithm::RSA
-        } else if algo_bytes.starts_with(b"ecdsa-sha2") {
-            Algorithm::ECDSA
-        } else if algo_bytes.starts_with(b"ssh-ed25519") {
-            Algorithm::ED25519
-        } else {
-            panic!("Unknown algorithm");
-        }
+        ret
     }
 }

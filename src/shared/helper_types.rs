@@ -1,6 +1,8 @@
 use core::fmt::{self, Debug};
 use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
+use std::fmt::Write;
+use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ByteArray<const N: usize> {
@@ -39,6 +41,17 @@ impl<const N: usize> ByteArray<N> {
     pub fn copy_from_slice(&mut self, slice: &[u8]) {
         self.data[..slice.len()].copy_from_slice(slice);
         self.length = slice.len();
+    }
+
+    pub fn append(&mut self, other: &Self) {
+        self.data[self.length..self.length + other.length]
+            .copy_from_slice(&other.data[..other.length]);
+        self.length += other.length;
+    }
+
+    pub fn append_slice(&mut self, slice: &[u8]) {
+        self.data[self.length..self.length + slice.len()].copy_from_slice(slice);
+        self.length += slice.len();
     }
 }
 
@@ -112,5 +125,32 @@ impl<const N: usize> Serialize for ByteArray<N> {
         S: Serializer,
     {
         serializer.serialize_bytes(&self.data[..self.length])
+    }
+}
+
+impl<const N: usize> dryoc::types::Bytes for ByteArray<N> {
+    fn as_slice(&self) -> &[u8] {
+        &self.data[..self.length]
+    }
+
+    fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    fn len(&self) -> usize {
+        self.length
+    }
+}
+
+impl<const N: usize> dryoc::types::ByteArray<N> for ByteArray<N> {
+    fn as_array(&self) -> &[u8; N] {
+        &self.data
+    }
+}
+
+impl<const N: usize> Zeroize for ByteArray<N> {
+    fn zeroize(&mut self) {
+        self.data.zeroize();
+        self.length.zeroize();
     }
 }
