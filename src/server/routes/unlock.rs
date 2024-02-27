@@ -1,11 +1,14 @@
-use std::io::Write;
+use std::io::{Read, Write};
+use std::path::Path;
 
+use remote_unlock_lib::pubkey::Pubkey;
 use remote_unlock_lib::{
-    config::Config, errors::RemoteUnlockError, net::request::Request, net::response::Response,
+    config::Config,
+    errors::RemoteUnlockError,
+    net::{request::Request, response::Response},
+    pubkey,
     unlock_request::UnlockRequest,
 };
-
-use crate::code_buffer::CodeBuffer;
 
 pub struct UnlockRoute<'a> {
     config: &'a Config,
@@ -39,32 +42,45 @@ impl<'a> UnlockRoute<'a> {
 
                 let signature_header = signature_header.unwrap().as_ref().unwrap();
 
+                let pubkey_path = Path::new(self.config.storage_dir())
+                    .join(std::str::from_utf8(unlock_req.id()).unwrap());
+
+                if !pubkey_path.exists() {
+                    resp.status = remote_unlock_lib::net::status::Status::NotFound;
+                    resp.to_writer(self.stream).unwrap();
+                    self.stream.flush().unwrap();
+                    return Ok(());
+                }
+
                 // Try to retrieve the public key from storage
-                let pubkey = self
-                    .config
-                    .pubkey()
-                    .load(self.config.storage_dir(), unlock_req.id.as_str());
-                // let code = enroll_req.code();
-                // let enroll_response = enroll_response::EnrollmentResponse::new();
+                let pubkey = match std::fs::File::open(pubkey_path) {
+                    Ok(mut file) => {
+                        let mut pubkey_buf = [0; 2048];
+                        let mut pubkey = Pubkey::new();
+                        file.read(&mut pubkey_buf).unwrap();
+                        pubkey.read_from_bytes(&pubkey_buf);
+                        pubkey
+                    }
+                    Err(e) => {
+                        println!("Error reading pubkey: {:?}", e);
+                        resp.status = remote_unlock_lib::net::status::Status::InternalServerError;
+                        resp.to_writer(self.stream).unwrap();
+                        self.stream.flush().unwrap();
+                        return Ok(());
+                    }
+                };
 
-                // let mut id: [u8; 32] = [0; 32];
-                // enroll_response.id().as_simple().encode_lower(&mut id);
+                let valid_request = unlock_req.verify(signature_header.value.as_bytes(), &pubkey);
 
-                // enroll_req
-                //     .pubkey()
-                //     .save(self.config.storage_dir(), std::str::from_utf8(&id).unwrap());
-
-                // if self.code_buffer.verify(code) {
-                //     resp.status = remote_unlock_lib::net::status::Status::Ok;
-                //     resp.add_header("Content-Type", "application/json");
-                //     serde_json::to_writer(&mut resp, &enroll_response).unwrap();
-                //     resp.to_writer(self.stream).unwrap();
-                //     self.stream.flush().unwrap();
-                // } else {
-                //     resp.status = remote_unlock_lib::net::status::Status::Forbidden;
-                //     resp.to_writer(self.stream).unwrap();
-                //     self.stream.flush().unwrap();
-                // }
+                if valid_request {
+                    resp.status = remote_unlock_lib::net::status::Status::Ok;
+                    resp.to_writer(self.stream).unwrap();
+                    self.stream.flush().unwrap();
+                } else {
+                    resp.status = remote_unlock_lib::net::status::Status::Forbidden;
+                    resp.to_writer(self.stream).unwrap();
+                    self.stream.flush().unwrap();
+                }
             }
             Err(e) => {
                 resp.status = remote_unlock_lib::net::status::Status::BadRequest;

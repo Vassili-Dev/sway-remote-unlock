@@ -30,8 +30,8 @@ fn main() -> Result<(), RemoteUnlockError> {
 
         if req.path.unwrap().as_str() == "/enroll" && req.method.unwrap().as_str() == "POST" {
             routes::enroll::EnrollRoute::new(&config, &mut stream, &mut code_buffer).post(req)?;
-        }
-        if req.path.unwrap().as_str() == "/unlock" && req.method.unwrap().as_str() == "POST" {
+        } else if req.path.unwrap().as_str() == "/unlock" && req.method.unwrap().as_str() == "POST"
+        {
             routes::unlock::UnlockRoute::new(&config, &mut stream).post(req)?;
         }
     }

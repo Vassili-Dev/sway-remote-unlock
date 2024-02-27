@@ -1,6 +1,8 @@
 use remote_unlock_lib::{
-    config::Config, enrollment_code::EnrollmentCode, errors::RemoteUnlockError,
-    net::response::Response,
+    config::Config,
+    enrollment_code::EnrollmentCode,
+    errors::RemoteUnlockError,
+    net::{request::Request, response::Response},
 };
 use std::{
     io::Read,
@@ -38,14 +40,14 @@ pub fn run_socket(
                 );
                 continue;
             }
-
-            let mut sock_headers = [httparse::EMPTY_HEADER; 16];
-            sock_headers.fill(httparse::EMPTY_HEADER);
-            let sock_req = httparse::Request::new(&mut sock_headers);
+            let sock_req = Request::from_stream(&mut stream).unwrap();
+            // let mut sock_req = httparse::Request::new(&mut sock_headers);
             // let body_pointer: httparse::Status<usize> = sock_req.parse(&sock_buf).unwrap();
-            stream.shutdown(std::net::Shutdown::Read).unwrap();
+            // stream.shutdown(std::net::Shutdown::Read).unwrap();
 
-            if sock_req.path.unwrap() == "/begin_enroll" && sock_req.method.unwrap() == "POST" {
+            if sock_req.path.unwrap().as_str() == "/begin_enroll"
+                && sock_req.method.unwrap().as_str() == "POST"
+            {
                 let code: EnrollmentCode = EnrollmentCode::new();
 
                 let mut resp = Response::new();

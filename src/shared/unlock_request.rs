@@ -28,4 +28,8 @@ impl UnlockRequest {
 
         message.verify(&public_key).map_or(false, |_v| true)
     }
+
+    pub fn id(&self) -> &[u8] {
+        &self.id.as_bytes()
+    }
 }

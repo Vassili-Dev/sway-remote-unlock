@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, io::Write};
 
 use crate::{
     config::Config,
-    errors::{OversizePacketError, RemoteUnlockError},
+    errors::{IncompleteRequestError, OversizePacketError, RemoteUnlockError},
     helper_types::ByteArray,
 };
 
@@ -108,6 +108,7 @@ impl Request {
         let mut buf_ptr = 0;
         let mut retries = 0;
 
+        // Read into buffer until stream is empty
         loop {
             if buf_ptr == Config::MAX_PACKET_SIZE {
                 return Err(OversizePacketError.into());
@@ -116,47 +117,70 @@ impl Request {
             let read_amt = stream.read(remaining)?;
             *(&mut buf_ptr) += read_amt;
 
-            let mut headers = [httparse::EMPTY_HEADER; 16];
-            let mut req = httparse::Request::new(&mut headers);
-            let status = match req.parse(&buf) {
-                Ok(httparse::Status::Complete(0)) => None,
-                Ok(httparse::Status::Complete(i)) => Some(i),
-                Ok(httparse::Status::Partial) => None,
-                Err(_) => None,
-            };
-
-            if status.is_none() {
-                if retries > 5 {
-                    return Err(OversizePacketError.into());
-                }
-                retries += 1;
-                continue;
+            if read_amt == 0 {
+                break;
             }
-
-            *(retries.borrow_mut()) = 0;
-
-            ret.path = Some(ByteArray::new_from_slice(req.path.unwrap().as_bytes()));
-            ret.method = Some(ByteArray::new_from_slice(req.method.unwrap().as_bytes()));
-
-            let content_length = req
-                .headers
-                .iter()
-                .find(|header| header.name == "Content-Length")
-                .unwrap()
-                .value;
-
-            let content_length = std::str::from_utf8(content_length)
-                .unwrap()
-                .parse::<usize>()
-                .unwrap();
-
-            let body = &buf[status.unwrap()..status.unwrap() + content_length];
-
-            ret.write(body).unwrap();
-            ret.body_len = content_length;
-
-            break;
         }
+
+        // Process the buffer into a request
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let mut req = httparse::Request::new(&mut headers);
+        let status = match req.parse(&buf) {
+            Ok(httparse::Status::Complete(i)) => Some(i),
+            Ok(httparse::Status::Partial) => None,
+            Err(_) => None,
+        };
+
+        // loop {
+        //     if buf_ptr == Config::MAX_PACKET_SIZE {
+        //         return Err(OversizePacketError.into());
+        //     }
+        //     let (_, remaining) = buf.split_at_mut(buf_ptr);
+        //     let read_amt = stream.read(remaining)?;
+        //     *(&mut buf_ptr) += read_amt;
+
+        //     let mut headers = [httparse::EMPTY_HEADER; 16];
+        //     let mut req = httparse::Request::new(&mut headers);
+        //     let status = match req.parse(&buf) {
+        //         Ok(httparse::Status::Complete(i)) => Some(i),
+        //         Ok(httparse::Status::Partial) => None,
+        //         Err(_) => None,
+        //     };
+
+        //     if status.is_none() {
+        //         if retries > 5 {
+        //             return Err(
+        //                 IncompleteRequestError::new("Failed to parse request".to_string()).into(),
+        //             );
+        //         }
+        //         retries += 1;
+        //         continue;
+        //     }
+
+        //     *(retries.borrow_mut()) = 0;
+
+        //     ret.path = Some(ByteArray::new_from_slice(req.path.unwrap().as_bytes()));
+        //     ret.method = Some(ByteArray::new_from_slice(req.method.unwrap().as_bytes()));
+
+        //     let content_length = req
+        //         .headers
+        //         .iter()
+        //         .find(|header| header.name == "Content-Length")
+        //         .unwrap()
+        //         .value;
+
+        //     let content_length = std::str::from_utf8(content_length)
+        //         .unwrap()
+        //         .parse::<usize>()
+        //         .unwrap();
+
+        //     let body = &buf[status.unwrap()..status.unwrap() + content_length];
+
+        //     ret.write(body).unwrap();
+        //     ret.body_len = content_length;
+
+        //     break;
+        // }
 
         Ok(ret)
     }

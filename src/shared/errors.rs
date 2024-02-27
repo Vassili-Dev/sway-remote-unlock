@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display, io};
+use std::{error::Error, f32::consts::E, fmt::Display, io};
 
 #[derive(Debug)]
 pub struct SocketError {
@@ -48,6 +48,22 @@ impl std::fmt::Display for OversizePacketError {
 }
 
 #[derive(Debug)]
+pub struct IncompleteRequestError {
+    msg: String,
+}
+
+impl IncompleteRequestError {
+    pub fn new(msg: String) -> IncompleteRequestError {
+        IncompleteRequestError { msg }
+    }
+}
+impl std::fmt::Display for IncompleteRequestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "RemoteUnlock -- IncompleteRequestError: {}", self.msg)
+    }
+}
+
+#[derive(Debug)]
 pub struct ServerError {
     msg: String,
 }
@@ -63,32 +79,13 @@ impl std::fmt::Display for ServerError {
         write!(f, "RemoteUnlock -- ServerError: {}", self.msg)
     }
 }
-// #[derive(Debug)]
-// pub struct ServerError {
-//     msg: String,
-// }
-
-// impl std::fmt::Display for ServerError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         write!(f, "RemoteUnlock -- ServerError: {}", self.msg)
-//     }
-// }
-
-// impl Error for ServerError {}
-
-// impl From<std::io::Error> for ServerError {
-//     fn from(err: std::io::Error) -> ServerError {
-//         ServerError {
-//             msg: err.to_string(),
-//         }
-//     }
-// }
 
 #[derive(Debug)]
 pub enum RemoteUnlockError {
     SocketError(SocketError),
     CodeBufferFullError(CodeBufferFullError),
     OversizePacketError(OversizePacketError),
+    IncompleteRequestError(IncompleteRequestError),
     ServerError(ServerError),
 }
 
@@ -98,6 +95,7 @@ impl Display for RemoteUnlockError {
             RemoteUnlockError::SocketError(e) => write!(f, "RemoteUnlock -- {}", e),
             RemoteUnlockError::CodeBufferFullError(e) => write!(f, "RemoteUnlock -- {}", e),
             RemoteUnlockError::OversizePacketError(e) => write!(f, "RemoteUnlock -- {}", e),
+            RemoteUnlockError::IncompleteRequestError(e) => write!(f, "RemoteUnlock -- {}", e),
             RemoteUnlockError::ServerError(e) => write!(f, "RemoteUnlock -- {}", e),
         }
     }
@@ -106,6 +104,12 @@ impl Display for RemoteUnlockError {
 impl From<SocketError> for RemoteUnlockError {
     fn from(err: SocketError) -> RemoteUnlockError {
         RemoteUnlockError::SocketError(err)
+    }
+}
+
+impl From<IncompleteRequestError> for RemoteUnlockError {
+    fn from(err: IncompleteRequestError) -> RemoteUnlockError {
+        RemoteUnlockError::IncompleteRequestError(err)
     }
 }
 
