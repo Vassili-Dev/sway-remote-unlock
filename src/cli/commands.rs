@@ -1,6 +1,6 @@
 use remote_unlock_lib::config::Config;
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
-use remote_unlock_lib::errors::{RemoteUnlockError, ServerError};
+use remote_unlock_lib::errors::RemoteUnlockError;
 use remote_unlock_lib::helper_types::ByteArray;
 use remote_unlock_lib::net::request::Request;
 use remote_unlock_lib::net::response::Response;
@@ -18,11 +18,11 @@ pub fn begin_enroll(config: &Config) -> Result<(), RemoteUnlockError> {
     let response = Response::from_stream(&mut stream).unwrap();
 
     if response.status != Status::Ok {
-        let err = ServerError::new(format!(
+        let err = RemoteUnlockError::ServerError(format!(
             "Server returned status code {}",
             response.status.to_u16()
         ));
-        return Err(err.into());
+        return Err(err);
     }
 
     let code = match serde_json::from_slice::<EnrollmentCode>(&response.body[..response.body_len]) {

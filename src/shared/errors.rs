@@ -1,142 +1,51 @@
-use std::{error::Error, f32::consts::E, fmt::Display, io};
-
-#[derive(Debug)]
-pub struct SocketError {
-    msg: String,
-}
-
-impl std::fmt::Display for SocketError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "RemoteUnlock -- SocketError: {}", self.msg)
-    }
-}
-
-impl Error for SocketError {}
-
-impl From<std::io::Error> for SocketError {
-    fn from(err: std::io::Error) -> SocketError {
-        SocketError {
-            msg: err.to_string(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct CodeBufferFullError;
-
-impl std::fmt::Display for CodeBufferFullError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "RemoteUnlock -- CodeBufferFullError: Code buffer is full"
-        )
-    }
-}
-
-impl Error for CodeBufferFullError {}
-
-#[derive(Debug)]
-pub struct OversizePacketError;
-
-impl std::fmt::Display for OversizePacketError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "RemoteUnlock -- OversizePacketError: Packet is too large"
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct IncompleteRequestError {
-    msg: String,
-}
-
-impl IncompleteRequestError {
-    pub fn new(msg: String) -> IncompleteRequestError {
-        IncompleteRequestError { msg }
-    }
-}
-impl std::fmt::Display for IncompleteRequestError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "RemoteUnlock -- IncompleteRequestError: {}", self.msg)
-    }
-}
-
-#[derive(Debug)]
-pub struct ServerError {
-    msg: String,
-}
-
-impl ServerError {
-    pub fn new(msg: String) -> ServerError {
-        ServerError { msg }
-    }
-}
-
-impl std::fmt::Display for ServerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "RemoteUnlock -- ServerError: {}", self.msg)
-    }
-}
-
 #[derive(Debug)]
 pub enum RemoteUnlockError {
-    SocketError(SocketError),
-    CodeBufferFullError(CodeBufferFullError),
-    OversizePacketError(OversizePacketError),
-    IncompleteRequestError(IncompleteRequestError),
-    ServerError(ServerError),
+    SocketError(std::io::Error),
+    PubkeyNotFoundError,
+    CodeBufferFullError,
+    OversizePacketError,
+    IncompleteRequestError,
+    ServerError(String),
+    HTTParseError(httparse::Error),
 }
 
-impl Display for RemoteUnlockError {
+impl std::fmt::Display for RemoteUnlockError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            RemoteUnlockError::SocketError(e) => write!(f, "RemoteUnlock -- {}", e),
-            RemoteUnlockError::CodeBufferFullError(e) => write!(f, "RemoteUnlock -- {}", e),
-            RemoteUnlockError::OversizePacketError(e) => write!(f, "RemoteUnlock -- {}", e),
-            RemoteUnlockError::IncompleteRequestError(e) => write!(f, "RemoteUnlock -- {}", e),
-            RemoteUnlockError::ServerError(e) => write!(f, "RemoteUnlock -- {}", e),
+            RemoteUnlockError::SocketError(e) => write!(f, "RemoteUnlock -- SocketError: {}", e),
+            RemoteUnlockError::CodeBufferFullError => write!(
+                f,
+                "RemoteUnlock -- CodeBufferFullError: Code buffer is full"
+            ),
+            RemoteUnlockError::OversizePacketError => write!(
+                f,
+                "RemoteUnlock -- OversizePacketError: Packet is too large"
+            ),
+            RemoteUnlockError::IncompleteRequestError => write!(
+                f,
+                "RemoteUnlock -- IncompleteRequestError: Attempted to parse incomplete request"
+            ),
+            RemoteUnlockError::ServerError(e) => write!(f, "RemoteUnlock -- ServerError: {}", e),
+            RemoteUnlockError::HTTParseError(e) => {
+                write!(f, "RemoteUnlock -- HTTParseError: {}", e)
+            }
+            RemoteUnlockError::PubkeyNotFoundError => {
+                write!(f, "RemoteUnlock -- PubketNotFoundError")
+            }
         }
     }
 }
 
-impl From<SocketError> for RemoteUnlockError {
-    fn from(err: SocketError) -> RemoteUnlockError {
+impl std::error::Error for RemoteUnlockError {}
+
+impl From<std::io::Error> for RemoteUnlockError {
+    fn from(err: std::io::Error) -> RemoteUnlockError {
         RemoteUnlockError::SocketError(err)
     }
 }
 
-impl From<IncompleteRequestError> for RemoteUnlockError {
-    fn from(err: IncompleteRequestError) -> RemoteUnlockError {
-        RemoteUnlockError::IncompleteRequestError(err)
+impl From<httparse::Error> for RemoteUnlockError {
+    fn from(err: httparse::Error) -> RemoteUnlockError {
+        RemoteUnlockError::HTTParseError(err)
     }
 }
-
-impl From<CodeBufferFullError> for RemoteUnlockError {
-    fn from(err: CodeBufferFullError) -> RemoteUnlockError {
-        RemoteUnlockError::CodeBufferFullError(err)
-    }
-}
-
-impl From<OversizePacketError> for RemoteUnlockError {
-    fn from(err: OversizePacketError) -> RemoteUnlockError {
-        RemoteUnlockError::OversizePacketError(err)
-    }
-}
-
-impl From<ServerError> for RemoteUnlockError {
-    fn from(err: ServerError) -> RemoteUnlockError {
-        RemoteUnlockError::ServerError(err)
-    }
-}
-
-impl From<io::Error> for RemoteUnlockError {
-    fn from(err: io::Error) -> RemoteUnlockError {
-        RemoteUnlockError::SocketError(SocketError {
-            msg: err.to_string(),
-        })
-    }
-}
-
-impl Error for RemoteUnlockError {}

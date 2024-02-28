@@ -23,6 +23,7 @@ fn main() -> Result<(), RemoteUnlockError> {
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
+        stream.set_nonblocking(true).unwrap();
 
         process_codes(&mut code_buffer, &server_recv);
 

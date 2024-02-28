@@ -1,4 +1,5 @@
-use remote_unlock_lib::{enrollment_code::EnrollmentCode, errors::CodeBufferFullError};
+use remote_unlock_lib::enrollment_code::EnrollmentCode;
+use remote_unlock_lib::errors::RemoteUnlockError;
 
 pub struct CodeBuffer {
     codes: [Option<EnrollmentCode>; 16],
@@ -9,9 +10,9 @@ impl CodeBuffer {
         CodeBuffer { codes: [None; 16] }
     }
 
-    pub fn insert(&mut self, code: EnrollmentCode) -> Result<(), CodeBufferFullError> {
+    pub fn insert(&mut self, code: EnrollmentCode) -> Result<(), RemoteUnlockError> {
         if self.codes.iter().all(|c| c.is_some()) {
-            return Err(CodeBufferFullError);
+            return Err(RemoteUnlockError::CodeBufferFullError);
         }
 
         for i in 0..self.codes.len() {

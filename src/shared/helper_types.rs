@@ -1,7 +1,6 @@
 use core::fmt::{self, Debug};
 use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
-use std::fmt::Write;
 use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Copy)]
@@ -152,5 +151,11 @@ impl<const N: usize> Zeroize for ByteArray<N> {
     fn zeroize(&mut self) {
         self.data.zeroize();
         self.length.zeroize();
+    }
+}
+
+impl<const N: usize> Default for ByteArray<N> {
+    fn default() -> Self {
+        ByteArray::new()
     }
 }

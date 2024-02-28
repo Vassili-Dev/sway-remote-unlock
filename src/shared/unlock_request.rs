@@ -30,6 +30,6 @@ impl UnlockRequest {
     }
 
     pub fn id(&self) -> &[u8] {
-        &self.id.as_bytes()
+        self.id.as_bytes()
     }
 }

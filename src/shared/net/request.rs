@@ -1,10 +1,6 @@
-use std::{borrow::BorrowMut, io::Write};
+use std::{io::Write, thread};
 
-use crate::{
-    config::Config,
-    errors::{IncompleteRequestError, OversizePacketError, RemoteUnlockError},
-    helper_types::ByteArray,
-};
+use crate::{config::Config, errors::RemoteUnlockError, helper_types::ByteArray};
 
 use super::headers::Header;
 
@@ -97,8 +93,8 @@ impl Request {
         }
         // Write content length
         writer.write_fmt(format_args!("Content-Length: {}\r\n", self.body_written))?;
-        writer.write(b"\r\n")?;
-        writer.write(&self.body[..self.body_written])?;
+        writer.write_all(b"\r\n")?;
+        writer.write_all(&self.body[..self.body_written])?;
         Ok(())
     }
 
@@ -106,16 +102,31 @@ impl Request {
         let mut ret = Request::new();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
-        let mut retries = 0;
 
         // Read into buffer until stream is empty
         loop {
-            if buf_ptr == Config::MAX_PACKET_SIZE {
-                return Err(OversizePacketError.into());
+            if buf_ptr >= Config::MAX_PACKET_SIZE {
+                return Err(RemoteUnlockError::OversizePacketError);
             }
             let (_, remaining) = buf.split_at_mut(buf_ptr);
-            let read_amt = stream.read(remaining)?;
-            *(&mut buf_ptr) += read_amt;
+            let read_amt = match stream.read(remaining) {
+                Ok(amt) => amt,
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::WouldBlock {
+                        0
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            };
+
+            if (read_amt == 0) && (buf_ptr == 0) {
+                // Wait for request
+                thread::sleep(std::time::Duration::from_millis(100));
+                continue;
+            }
+
+            buf_ptr += read_amt;
 
             if read_amt == 0 {
                 break;
@@ -126,62 +137,39 @@ impl Request {
         let mut headers = [httparse::EMPTY_HEADER; 16];
         let mut req = httparse::Request::new(&mut headers);
         let status = match req.parse(&buf) {
-            Ok(httparse::Status::Complete(i)) => Some(i),
-            Ok(httparse::Status::Partial) => None,
-            Err(_) => None,
+            Ok(httparse::Status::Complete(i)) => i,
+            Ok(httparse::Status::Partial) => return Err(RemoteUnlockError::IncompleteRequestError),
+            Err(e) => return Err(e.into()),
         };
 
-        // loop {
-        //     if buf_ptr == Config::MAX_PACKET_SIZE {
-        //         return Err(OversizePacketError.into());
-        //     }
-        //     let (_, remaining) = buf.split_at_mut(buf_ptr);
-        //     let read_amt = stream.read(remaining)?;
-        //     *(&mut buf_ptr) += read_amt;
+        ret.path = Some(ByteArray::new_from_slice(req.path.unwrap().as_bytes()));
+        ret.method = Some(ByteArray::new_from_slice(req.method.unwrap().as_bytes()));
 
-        //     let mut headers = [httparse::EMPTY_HEADER; 16];
-        //     let mut req = httparse::Request::new(&mut headers);
-        //     let status = match req.parse(&buf) {
-        //         Ok(httparse::Status::Complete(i)) => Some(i),
-        //         Ok(httparse::Status::Partial) => None,
-        //         Err(_) => None,
-        //     };
+        let content_length = req
+            .headers
+            .iter()
+            .find(|header| header.name == "Content-Length")
+            .unwrap()
+            .value;
 
-        //     if status.is_none() {
-        //         if retries > 5 {
-        //             return Err(
-        //                 IncompleteRequestError::new("Failed to parse request".to_string()).into(),
-        //             );
-        //         }
-        //         retries += 1;
-        //         continue;
-        //     }
+        let content_length = std::str::from_utf8(content_length)
+            .unwrap()
+            .parse::<usize>()
+            .unwrap();
 
-        //     *(retries.borrow_mut()) = 0;
+        let body_start_ptr = status;
+        let body_end_ptr = status + content_length;
 
-        //     ret.path = Some(ByteArray::new_from_slice(req.path.unwrap().as_bytes()));
-        //     ret.method = Some(ByteArray::new_from_slice(req.method.unwrap().as_bytes()));
-
-        //     let content_length = req
-        //         .headers
-        //         .iter()
-        //         .find(|header| header.name == "Content-Length")
-        //         .unwrap()
-        //         .value;
-
-        //     let content_length = std::str::from_utf8(content_length)
-        //         .unwrap()
-        //         .parse::<usize>()
-        //         .unwrap();
-
-        //     let body = &buf[status.unwrap()..status.unwrap() + content_length];
-
-        //     ret.write(body).unwrap();
-        //     ret.body_len = content_length;
-
-        //     break;
-        // }
+        let body = &buf[body_start_ptr..body_end_ptr];
+        ret.write_all(body)?;
+        ret.body_len = content_length;
 
         Ok(ret)
+    }
+}
+
+impl Default for Request {
+    fn default() -> Self {
+        Self::new()
     }
 }

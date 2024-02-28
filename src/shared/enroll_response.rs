@@ -16,3 +16,9 @@ impl EnrollmentResponse {
         &self.id
     }
 }
+
+impl Default for EnrollmentResponse {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -36,3 +36,9 @@ impl Display for EnrollmentCode {
         write!(f, "Code: {}\nExpires: {}", self.code, expires)
     }
 }
+
+impl Default for EnrollmentCode {
+    fn default() -> Self {
+        Self::new()
+    }
+}

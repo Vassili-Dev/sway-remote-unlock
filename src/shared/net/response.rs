@@ -1,10 +1,7 @@
-use crate::{
-    config::Config,
-    errors::{OversizePacketError, RemoteUnlockError, ServerError},
-};
+use crate::{config::Config, errors::RemoteUnlockError};
 
 use super::{headers::Header, status::Status};
-use std::io::Write;
+use std::{io::Write, thread};
 
 #[derive(Debug)]
 pub struct Response {
@@ -90,8 +87,8 @@ impl Response {
         }
         // Write content length
         writer.write_fmt(format_args!("Content-Length: {}\r\n", self.body_written))?;
-        writer.write(b"\r\n")?;
-        writer.write(&self.body[..self.body_written])?;
+        writer.write_all(b"\r\n")?;
+        writer.write_all(&self.body[..self.body_written])?;
         Ok(())
     }
 
@@ -99,61 +96,76 @@ impl Response {
         let mut ret = Response::new();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
-        let mut retries = 0;
-        // Leverage httparse response parsing to help generate this response
+
+        // Read response into buffer
         loop {
-            if buf_ptr == Config::MAX_PACKET_SIZE {
-                return Err(OversizePacketError.into());
+            if buf_ptr >= Config::MAX_PACKET_SIZE {
+                return Err(RemoteUnlockError::OversizePacketError);
             }
             let (_, remaining) = buf.split_at_mut(buf_ptr);
-            let read_amt = stream.read(remaining)?;
-            *(&mut buf_ptr) += read_amt;
-
-            let mut headers = [httparse::EMPTY_HEADER; 16];
-            let mut response = httparse::Response::new(&mut headers);
-            let status = match response.parse(&buf) {
-                Ok(httparse::Status::Complete(0)) => None,
-                Ok(httparse::Status::Complete(i)) => Some(i),
-                Ok(httparse::Status::Partial) => None,
-                Err(_) => None,
+            let read_amt = match stream.read(remaining) {
+                Ok(amt) => amt,
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::WouldBlock {
+                        0
+                    } else {
+                        return Err(e.into());
+                    }
+                }
             };
 
-            if status.is_none() {
-                if retries > 5 {
-                    return Err(OversizePacketError.into());
-                }
-                retries += 1;
+            if (read_amt == 0) && (buf_ptr == 0) {
+                // Wait for response
+                thread::sleep(std::time::Duration::from_millis(100));
                 continue;
             }
 
-            if response.code.unwrap() != 200 {
-                let err = ServerError::new(format!(
-                    "Server returned status code {}",
-                    response.code.unwrap()
-                ));
-                return Err(err.into());
+            buf_ptr += read_amt;
+
+            if read_amt == 0 {
+                break;
             }
-
-            let content_length = response
-                .headers
-                .iter()
-                .find(|header| header.name == "Content-Length")
-                .unwrap()
-                .value;
-
-            let content_length = std::str::from_utf8(content_length)
-                .unwrap()
-                .parse::<usize>()
-                .unwrap();
-
-            let body = &buf[status.unwrap()..status.unwrap() + content_length];
-
-            ret.write(body).unwrap();
-            ret.body_len = content_length;
-
-            break;
         }
 
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let mut response = httparse::Response::new(&mut headers);
+        let status = match response.parse(&buf) {
+            Ok(httparse::Status::Complete(i)) => i,
+            Ok(httparse::Status::Partial) => return Err(RemoteUnlockError::IncompleteRequestError),
+            Err(e) => return Err(e.into()),
+        };
+
+        if response.code.unwrap() != 200 {
+            let err = RemoteUnlockError::ServerError(format!(
+                "Server returned status code {}",
+                response.code.unwrap()
+            ));
+            return Err(err);
+        }
+
+        let content_length = response
+            .headers
+            .iter()
+            .find(|header| header.name == "Content-Length")
+            .unwrap()
+            .value;
+
+        let content_length = std::str::from_utf8(content_length)
+            .unwrap()
+            .parse::<usize>()
+            .unwrap();
+
+        let body = &buf[status..status + content_length];
+
+        ret.write_all(body).unwrap();
+        ret.body_len = content_length;
+
         Ok(ret)
+    }
+}
+
+impl Default for Response {
+    fn default() -> Self {
+        Self::new()
     }
 }

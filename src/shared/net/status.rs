@@ -1,4 +1,4 @@
-use crate::errors::{RemoteUnlockError, ServerError};
+use crate::errors::RemoteUnlockError;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -31,7 +31,10 @@ impl Status {
             403 => Ok(Status::Forbidden),
             404 => Ok(Status::NotFound),
             500 => Ok(Status::InternalServerError),
-            _ => Err(ServerError::new(format!("Unknown status code: {}", code)).into()),
+            _ => Err(RemoteUnlockError::ServerError(format!(
+                "Unknown status code: {}",
+                code
+            ))),
         }
     }
 }

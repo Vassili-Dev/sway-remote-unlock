@@ -1,7 +1,4 @@
-use crate::{
-    errors::{RemoteUnlockError, ServerError},
-    helper_types::ByteArray,
-};
+use crate::{errors::RemoteUnlockError, helper_types::ByteArray};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Header<const N: usize = 32, const V: usize = 64> {
@@ -75,7 +72,9 @@ impl<const N: usize, const V: usize> Header<N, V> {
             }
 
             if (name && name_len == N) || (value_len == V) {
-                return Err(ServerError::new("Header name or value too long".to_string()).into());
+                return Err(RemoteUnlockError::ServerError(
+                    "Header name or value too long".to_string(),
+                ));
             }
 
             if name {
@@ -88,5 +87,11 @@ impl<const N: usize, const V: usize> Header<N, V> {
         }
 
         Ok(header)
+    }
+}
+
+impl<const N: usize, const V: usize> Default for Header<N, V> {
+    fn default() -> Self {
+        Self::new()
     }
 }

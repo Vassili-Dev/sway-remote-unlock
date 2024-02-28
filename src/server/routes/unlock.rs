@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 
 use remote_unlock_lib::pubkey::Pubkey;
@@ -6,7 +6,6 @@ use remote_unlock_lib::{
     config::Config,
     errors::RemoteUnlockError,
     net::{request::Request, response::Response},
-    pubkey,
     unlock_request::UnlockRequest,
 };
 
@@ -53,16 +52,12 @@ impl<'a> UnlockRoute<'a> {
                 }
 
                 // Try to retrieve the public key from storage
-                let pubkey = match std::fs::File::open(pubkey_path) {
-                    Ok(mut file) => {
-                        let mut pubkey_buf = [0; 2048];
-                        let mut pubkey = Pubkey::new();
-                        file.read(&mut pubkey_buf).unwrap();
-                        pubkey.read_from_bytes(&pubkey_buf);
-                        pubkey
-                    }
-                    Err(e) => {
-                        println!("Error reading pubkey: {:?}", e);
+                let pubkey = match Pubkey::from_file(
+                    self.config.storage_dir(),
+                    std::str::from_utf8(unlock_req.id()).unwrap(),
+                ) {
+                    Ok(pubkey) => pubkey,
+                    Err(_) => {
                         resp.status = remote_unlock_lib::net::status::Status::InternalServerError;
                         resp.to_writer(self.stream).unwrap();
                         self.stream.flush().unwrap();
