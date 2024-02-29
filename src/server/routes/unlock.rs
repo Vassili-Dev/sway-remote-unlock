@@ -27,10 +27,9 @@ impl<'a> UnlockRoute<'a> {
         match unlock_req {
             Ok(unlock_req) => {
                 // Get the signature header
-                let signature_header = req
-                    .headers
-                    .iter()
-                    .find(|h| h.is_some() && h.as_ref().unwrap().name.as_str() == "Signature");
+                let signature_header = req.headers.iter().find(|h| {
+                    h.is_some() && h.as_ref().unwrap().name.as_str() == "X-RemoteUnlock-Digest"
+                });
 
                 if signature_header.is_none() {
                     resp.status = remote_unlock_lib::net::status::Status::BadRequest;

@@ -7,6 +7,7 @@ pub enum RemoteUnlockError {
     IncompleteRequestError,
     ServerError(String),
     HTTParseError(httparse::Error),
+    KeyExists(String),
 }
 
 impl std::fmt::Display for RemoteUnlockError {
@@ -31,6 +32,9 @@ impl std::fmt::Display for RemoteUnlockError {
             }
             RemoteUnlockError::PubkeyNotFoundError => {
                 write!(f, "RemoteUnlock -- PubketNotFoundError")
+            }
+            RemoteUnlockError::KeyExists(msg) => {
+                write!(f, "RemoteUnlock -- KeyExists: {}", msg)
             }
         }
     }

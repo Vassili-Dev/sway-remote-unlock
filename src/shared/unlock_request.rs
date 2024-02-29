@@ -8,7 +8,7 @@ const SERIAL_LEN: usize = size_of::<u8>() * 21 + size_of::<u128>();
 
 #[derive(Debug, serde::Deserialize)]
 pub struct UnlockRequest {
-    id: ByteArray<32>,
+    id: ByteArray<3>,
     nonce: u128,
 }
 
@@ -31,5 +31,44 @@ impl UnlockRequest {
 
     pub fn id(&self) -> &[u8] {
         self.id.as_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pubkey::Pubkey;
+    use dryoc::{
+        classic::crypto_sign::PublicKey,
+        sign::{SecretKey, Signature, SigningKeyPair},
+        types::ByteArray,
+    };
+
+    #[test]
+    fn test_verify() {
+        let key_pair: SigningKeyPair<[u8; 32], SecretKey> = SigningKeyPair::gen();
+        let public_key: PublicKey = key_pair.public_key;
+        let mut pubkey = Pubkey::new();
+        pubkey.read_from_bytes(&public_key);
+
+        let unlock_request = UnlockRequest {
+            id: crate::helper_types::ByteArray::new_from_slice("test".as_bytes()),
+            nonce: 0,
+        };
+
+        let mut serial: crate::helper_types::ByteArray<SERIAL_LEN> =
+            crate::helper_types::ByteArray::new();
+        serial.append_slice("{\"id\":\"".as_bytes());
+        serial.append_slice(unlock_request.id.as_bytes());
+        serial.append_slice(&unlock_request.nonce.to_be_bytes());
+        serial.append_slice("\"}".as_bytes());
+
+        let signed: SignedMessage<Signature, crate::helper_types::ByteArray<SERIAL_LEN>> =
+            key_pair.sign(serial).unwrap();
+        let (signature, _message) = signed.into_parts();
+        let signature: &[u8] = signature.as_array();
+
+        let valid = unlock_request.verify(signature, &pubkey);
+        assert!(valid);
     }
 }

@@ -12,6 +12,10 @@ fn main() {
         Command::BeginEnroll(_) => {
             commands::begin_enroll(&config).unwrap();
         }
+        #[cfg(debug_assertions)]
+        Command::GenerateKeys(generate_keys) => {
+            commands::generate_keys(&config, generate_keys).unwrap();
+        }
         Command::Terminate(_) => {}
     }
 }

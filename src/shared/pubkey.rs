@@ -19,6 +19,13 @@ impl Pubkey {
         }
     }
 
+    pub fn new_initialized() -> Pubkey {
+        let source = PublicKey::new();
+        Pubkey {
+            raw: ByteArray::new_from_slice(&source),
+        }
+    }
+
     pub fn read_from_bytes(&mut self, bytes: &[u8]) {
         self.raw.copy_from_slice(bytes);
     }
