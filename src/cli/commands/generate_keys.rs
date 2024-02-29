@@ -8,6 +8,7 @@ use remote_unlock_lib::config::Config;
 use remote_unlock_lib::errors::RemoteUnlockError;
 use std::path::Path;
 
+#[cfg(debug_assertions)]
 pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), RemoteUnlockError> {
     let keypair: dryoc::sign::SigningKeyPair<PublicKey, SecretKey> =
         dryoc::sign::SigningKeyPair::gen();
