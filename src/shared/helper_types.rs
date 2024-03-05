@@ -159,3 +159,37 @@ impl<const N: usize> Default for ByteArray<N> {
         ByteArray::new()
     }
 }
+
+pub mod der {
+    use std::marker::PhantomData;
+
+    use der::{
+        asn1::OctetStringRef, Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader,
+        Writer,
+    };
+
+    pub struct NestedOctetString<'a, T: Decode<'a> + Encode> {
+        phantom: &'a PhantomData<T>,
+        inner: T,
+    }
+
+    impl<'a, T: Decode<'a> + Encode> EncodeValue for NestedOctetString<'a, T> {
+        fn value_len(&self) -> der::Result<Length> {
+            self.inner.encoded_len()
+        }
+
+        fn encode_value(&self, writer: &mut impl Writer) -> der::Result<()> {
+            self.inner.encode(writer)
+        }
+    }
+
+    impl<'a, T: Decode<'a> + Encode> DecodeValue<'a> for NestedOctetString<'a, T> {
+        fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> der::Result<Self> {
+            let inner = OctetStringRef::decode_value(reader, header)?.decode_into::<T>()?;
+            Ok(Self {
+                inner,
+                phantom: &PhantomData,
+            })
+        }
+    }
+}

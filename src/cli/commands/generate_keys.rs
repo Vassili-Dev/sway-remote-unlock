@@ -61,3 +61,82 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), R
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::args::GenerateKeysCommand;
+    use der::asn1::{ObjectIdentifier, OctetStringRef};
+    use der::{
+        Decode, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length, Reader, Tag, Writer,
+    };
+    use remote_unlock_lib::config::Config;
+    use std::borrow::BorrowMut;
+    use std::path::PathBuf;
+
+    // 302e020100300506032b657004220420e6d402bca22a67721c8ce8b1ff7ac6b4a556462f558fac148da972992b6f32df
+    const KEY: [u8; 48] = [
+        0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04,
+        0x20, 0xe6, 0xd4, 0x02, 0xbc, 0xa2, 0x2a, 0x67, 0x72, 0x1c, 0x8c, 0xe8, 0xb1, 0xff, 0x7a,
+        0xc6, 0xb4, 0xa5, 0x56, 0x46, 0x2f, 0x55, 0x8f, 0xac, 0x14, 0x8d, 0xa9, 0x72, 0x99, 0x2b,
+        0x6f, 0x32, 0xdf,
+    ];
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct SSLDerKey<'a> {
+        inner: OctetStringRef<'a>,
+    }
+
+    impl SSLDerKey<'_> {
+        fn as_bytes(&self) -> &[u8] {
+            self.inner.as_bytes()
+        }
+    }
+
+    impl<'a> DecodeValue<'a> for SSLDerKey<'a> {
+        fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> der::Result<Self> {
+            let res = OctetStringRef::decode_value(reader, header)?
+                .decode_into::<OctetStringRef<'a>>()?;
+            Ok(Self { inner: res })
+        }
+    }
+
+    impl<'a> EncodeValue for SSLDerKey<'a> {
+        fn value_len(&self) -> der::Result<Length> {
+            Ok(self.inner.len())
+        }
+
+        fn encode_value(&self, writer: &mut impl Writer) -> der::Result<()> {
+            self.inner.encode(writer)
+        }
+    }
+
+    impl FixedTag for SSLDerKey<'_> {
+        const TAG: Tag = Tag::OctetString;
+    }
+
+    #[derive(Debug, PartialEq, Eq, der::Sequence)]
+    struct AlgorithmIdentifier {
+        oid: ObjectIdentifier,
+    }
+
+    #[derive(Debug, PartialEq, Eq, der::Sequence)]
+    struct DerKeyBorrowed<'a> {
+        version: u8,              // 0
+        oid: AlgorithmIdentifier, // 1.3.101.112
+        key: SSLDerKey<'a>,
+    }
+
+    #[test]
+    fn test_parse_der() {
+        let key = DerKeyBorrowed::from_der(&KEY).unwrap();
+        assert_eq!(key.version, 0);
+        assert_eq!(
+            key.oid,
+            AlgorithmIdentifier {
+                oid: ObjectIdentifier::new("1.3.101.112").expect("Invalid OID")
+            }
+        );
+        assert_eq!(key.key.as_bytes(), &KEY[16..]);
+    }
+}
