@@ -71,6 +71,7 @@ mod tests {
         Decode, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length, Reader, Tag, Writer,
     };
     use remote_unlock_lib::config::Config;
+    use remote_unlock_lib::helper_types::der::NestedOctetString;
     use std::borrow::BorrowMut;
     use std::path::PathBuf;
 
@@ -82,39 +83,6 @@ mod tests {
         0x6f, 0x32, 0xdf,
     ];
 
-    #[derive(Debug, PartialEq, Eq)]
-    struct SSLDerKey<'a> {
-        inner: OctetStringRef<'a>,
-    }
-
-    impl SSLDerKey<'_> {
-        fn as_bytes(&self) -> &[u8] {
-            self.inner.as_bytes()
-        }
-    }
-
-    impl<'a> DecodeValue<'a> for SSLDerKey<'a> {
-        fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> der::Result<Self> {
-            let res = OctetStringRef::decode_value(reader, header)?
-                .decode_into::<OctetStringRef<'a>>()?;
-            Ok(Self { inner: res })
-        }
-    }
-
-    impl<'a> EncodeValue for SSLDerKey<'a> {
-        fn value_len(&self) -> der::Result<Length> {
-            Ok(self.inner.len())
-        }
-
-        fn encode_value(&self, writer: &mut impl Writer) -> der::Result<()> {
-            self.inner.encode(writer)
-        }
-    }
-
-    impl FixedTag for SSLDerKey<'_> {
-        const TAG: Tag = Tag::OctetString;
-    }
-
     #[derive(Debug, PartialEq, Eq, der::Sequence)]
     struct AlgorithmIdentifier {
         oid: ObjectIdentifier,
@@ -124,7 +92,7 @@ mod tests {
     struct DerKeyBorrowed<'a> {
         version: u8,              // 0
         oid: AlgorithmIdentifier, // 1.3.101.112
-        key: SSLDerKey<'a>,
+        key: NestedOctetString<'a, OctetStringRef<'a>>,
     }
 
     #[test]

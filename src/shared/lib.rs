@@ -1,4 +1,5 @@
 pub mod config;
+pub mod crypto;
 pub mod enroll_request;
 pub mod enroll_response;
 pub mod enrollment_code;

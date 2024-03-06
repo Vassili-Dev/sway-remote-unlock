@@ -164,10 +164,11 @@ pub mod der {
     use std::marker::PhantomData;
 
     use der::{
-        asn1::OctetStringRef, Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader,
-        Writer,
+        asn1::OctetStringRef, Decode, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length,
+        Reader, Writer,
     };
 
+    #[derive(Debug, PartialEq, Eq)]
     pub struct NestedOctetString<'a, T: Decode<'a> + Encode> {
         phantom: &'a PhantomData<T>,
         inner: T,
@@ -191,5 +192,15 @@ pub mod der {
                 phantom: &PhantomData,
             })
         }
+    }
+
+    impl<'a> NestedOctetString<'a, OctetStringRef<'a>> {
+        pub fn as_bytes(&self) -> &[u8] {
+            self.inner.as_bytes()
+        }
+    }
+
+    impl<'a> FixedTag for NestedOctetString<'a, OctetStringRef<'a>> {
+        const TAG: der::Tag = der::Tag::OctetString;
     }
 }
