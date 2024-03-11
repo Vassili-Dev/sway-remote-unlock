@@ -8,6 +8,7 @@ pub enum RemoteUnlockError {
     ServerError(String),
     HTTParseError(httparse::Error),
     KeyExists(String),
+    KeyParseError(der::Error),
 }
 
 impl std::fmt::Display for RemoteUnlockError {
@@ -36,6 +37,9 @@ impl std::fmt::Display for RemoteUnlockError {
             RemoteUnlockError::KeyExists(msg) => {
                 write!(f, "RemoteUnlock -- KeyExists: {}", msg)
             }
+            RemoteUnlockError::KeyParseError(e) => {
+                write!(f, "RemoteUnlock -- KeyParseError: {}", e)
+            }
         }
     }
 }
@@ -51,5 +55,11 @@ impl From<std::io::Error> for RemoteUnlockError {
 impl From<httparse::Error> for RemoteUnlockError {
     fn from(err: httparse::Error) -> RemoteUnlockError {
         RemoteUnlockError::HTTParseError(err)
+    }
+}
+
+impl From<der::Error> for RemoteUnlockError {
+    fn from(err: der::Error) -> RemoteUnlockError {
+        RemoteUnlockError::KeyParseError(err)
     }
 }

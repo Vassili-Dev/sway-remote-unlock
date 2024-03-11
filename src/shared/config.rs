@@ -19,6 +19,7 @@ pub struct Config {
 
 impl Config {
     pub const MAX_PACKET_SIZE: usize = 1024 * 4;
+    pub const BUFFER_SIZE: usize = 1024;
 
     pub fn new() -> Config {
         let socket_path = std::env::var(ENV_SOCKET_PATH).ok();

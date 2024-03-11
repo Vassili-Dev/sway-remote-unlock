@@ -167,7 +167,6 @@ pub mod der {
         asn1::OctetStringRef, Decode, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length,
         Reader, Writer,
     };
-
     #[derive(Debug, PartialEq, Eq)]
     pub struct NestedOctetString<'a, T: Decode<'a> + Encode> {
         phantom: &'a PhantomData<T>,
@@ -195,8 +194,15 @@ pub mod der {
     }
 
     impl<'a> NestedOctetString<'a, OctetStringRef<'a>> {
-        pub fn as_bytes(&self) -> &[u8] {
+        pub fn as_bytes(&self) -> &'a [u8] {
             self.inner.as_bytes()
+        }
+
+        pub fn new(inner: OctetStringRef<'a>) -> Self {
+            Self {
+                inner,
+                phantom: &PhantomData,
+            }
         }
     }
 
