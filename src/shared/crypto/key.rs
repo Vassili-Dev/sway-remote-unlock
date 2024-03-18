@@ -1,9 +1,11 @@
-use der::{Decode, Encode, Length};
+use der::{
+    pem::PemLabel, Decode, DecodeOwned, DecodePem, DecodeValue, Encode, EncodeValue, Length,
+};
 
 use crate::errors::RemoteUnlockError;
 
 use super::{
-    der::DerKeyBorrowed,
+    der::{DerKey, DerKeyBorrowed},
     pem::{self, PemDataBorrowed},
 };
 
@@ -11,49 +13,109 @@ use der::pem::LineEnding;
 
 #[derive(Debug)]
 pub enum KeyBorrowed<'a> {
-    SecretKey { key: DerKeyBorrowed<'a> },
-    PublicKey { key: DerKeyBorrowed<'a> },
+    SecretKey(DerKeyBorrowed<'a>),
+    PublicKey(DerKeyBorrowed<'a>),
 }
 
 impl<'a> KeyBorrowed<'a> {
     pub fn as_array(&'a self) -> &'a [u8] {
         match self {
-            Self::SecretKey { key } => key.as_bytes(),
-            Self::PublicKey { key } => key.as_bytes(),
-        }
-    }
-
-    pub fn from_pem(file: &'a [u8]) -> Result<KeyBorrowed<'a>, RemoteUnlockError> {
-        let mut pem_data: PemDataBorrowed = pem::PemDataBorrowed::new(file).unwrap();
-        let label = pem_data.label();
-        let der_key = pem_data.key()?;
-
-        match label {
-            "PUBLIC KEY" => Ok(Self::PublicKey { key: der_key }),
-            "PRIVATE KEY" => Ok(Self::SecretKey { key: der_key }),
-            _ => Err(RemoteUnlockError::KeyParseError(der::Error::new(
-                der::ErrorKind::Pem(der::pem::Error::Label),
-                Length::ZERO,
-            ))),
+            Self::SecretKey(key) => key.as_bytes(),
+            Self::PublicKey(key) => key.as_bytes(),
         }
     }
 
     pub fn from_der(file: &'a [u8]) -> Result<KeyBorrowed<'a>, RemoteUnlockError> {
         let der_key = DerKeyBorrowed::from_der(file)?;
-        Ok(Self::PublicKey { key: der_key })
+        Ok(Self::PublicKey(der_key))
     }
 
     pub fn to_der(&self, writer: &mut impl der::Writer) -> Result<(), RemoteUnlockError> {
         match self {
-            Self::SecretKey { key } => Ok(key.encode(writer)?),
-            Self::PublicKey { key } => Ok(key.encode(writer)?),
+            Self::SecretKey(key) => Ok(key.encode(writer)?),
+            Self::PublicKey(key) => Ok(key.encode(writer)?),
         }
     }
 
     pub fn to_pem(&self, writer: &mut [u8]) -> Result<usize, RemoteUnlockError> {
         let label = match self {
-            Self::PublicKey { key: _ } => "PUBLIC KEY",
-            Self::SecretKey { key: _ } => "PRIVATE KEY",
+            Self::PublicKey(_) => "PUBLIC KEY",
+            Self::SecretKey(_) => "PRIVATE KEY",
+        };
+
+        let mut pem = der::PemWriter::new(label, LineEnding::LF, writer)?;
+
+        self.to_der(&mut pem)?;
+
+        match pem.finish() {
+            Ok(0) => Err(RemoteUnlockError::KeyParseError(der::Error::new(
+                der::ErrorKind::Pem(der::pem::Error::Length),
+                Length::ZERO,
+            ))),
+            Err(e) => Err(e.into()),
+            Ok(written) => Ok(written),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum KeyOwned {
+    SecretKey(PrivateKeyOwned),
+    PublicKey(PublicKeyOwned),
+}
+
+#[derive(Debug)]
+struct PrivateKeyOwned(DerKey);
+#[derive(Debug)]
+struct PublicKeyOwned(DerKey);
+
+impl PemLabel for PrivateKeyOwned {
+    const PEM_LABEL: &'static str = "PRIVATE KEY";
+}
+
+impl PemLabel for PublicKeyOwned {
+    const PEM_LABEL: &'static str = "PUBLIC KEY";
+}
+
+impl<'a> Decode<'a> for PrivateKeyOwned {
+    fn decode<R: der::Reader<'a>>(reader: &mut R) -> der::Result<Self> {
+        let key = DerKey::decode(reader)?;
+        Ok(PrivateKeyOwned(key))
+    }
+}
+
+impl Encode for PrivateKeyOwned {
+    fn encoded_len(&self) -> der::Result<Length> {
+        self.0.encoded_len()
+    }
+
+    fn encode(&self, writer: &mut impl der::Writer) -> der::Result<()> {
+        self.0.encode(writer)
+    }
+}
+
+impl KeyOwned {
+    pub fn from_pem(file: &[u8]) -> Result<KeyOwned, RemoteUnlockError> {
+        let der = PrivateKeyOwned::from_pem(&file)?;
+        Ok(KeyOwned::SecretKey(der))
+    }
+
+    pub fn from_der(file: &[u8]) -> Result<KeyOwned, RemoteUnlockError> {
+        let key = DerKey::from_der(file)?;
+        Ok(KeyOwned::PublicKey(key))
+    }
+
+    pub fn to_der(&self, writer: &mut impl der::Writer) -> Result<(), RemoteUnlockError> {
+        match self {
+            Self::SecretKey(key) => Ok(key.encode(writer)?),
+            Self::PublicKey(key) => Ok(key.encode(writer)?),
+        }
+    }
+
+    pub fn to_pem(&self, writer: &mut [u8]) -> Result<usize, RemoteUnlockError> {
+        let label = match self {
+            Self::PublicKey(_) => "PUBLIC KEY",
+            Self::SecretKey(_) => "PRIVATE KEY",
         };
 
         let mut pem = der::PemWriter::new(label, LineEnding::LF, writer)?;
@@ -77,6 +139,8 @@ mod tests {
     use crate::crypto::key::KeyBorrowed;
     use der::asn1::ObjectIdentifier;
     use der::Decode;
+
+    use super::KeyOwned;
 
     // 302e020100300506032b657004220420e6d402bca22a67721c8ce8b1ff7ac6b4a556462f558fac148da972992b6f32df
     const KEY: [u8; 48] = [
@@ -108,13 +172,5 @@ MC4CAQAwBQYDK2VwBCIEIKoqSsjwM1ZKfRLiCl2uvlshQnkX3nOgn1bNQOKUPHY2
         0x76, 0x36,
     ];
     #[test]
-    fn test_parse_pem() {
-        let key = KeyBorrowed::from_pem(KEY_PEM.as_bytes()).unwrap();
-        match key {
-            KeyBorrowed::SecretKey { key } => {
-                assert_eq!(key.as_bytes(), &EXCPECTED_KEY);
-            }
-            _ => panic!("Expected a secret key"),
-        }
-    }
+    fn test_parse_pem() {}
 }

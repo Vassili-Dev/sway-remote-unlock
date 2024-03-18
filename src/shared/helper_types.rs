@@ -1,9 +1,10 @@
 use core::fmt::{self, Debug};
+use der::{DecodeValue, Encode, EncodeValue, FixedTag, Sequence};
 use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
 use zeroize::Zeroize;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ByteArray<const N: usize> {
     data: [u8; N],
     length: usize,
@@ -51,6 +52,32 @@ impl<const N: usize> ByteArray<N> {
     pub fn append_slice(&mut self, slice: &[u8]) {
         self.data[self.length..self.length + slice.len()].copy_from_slice(slice);
         self.length += slice.len();
+    }
+}
+
+impl<const N: usize> FixedTag for ByteArray<N> {
+    const TAG: der::Tag = der::Tag::OctetString;
+}
+
+impl<'a, const N: usize> DecodeValue<'a> for ByteArray<N> {
+    fn decode_value<R: der::Reader<'a>>(reader: &mut R, header: der::Header) -> der::Result<Self> {
+        let mut data = [0; N];
+        let length = u32::from(reader.input_len()) as usize;
+        assert!(length <= N, "byte array too large");
+
+        reader.read_into(&mut data[..length])?;
+
+        Ok(ByteArray { data, length })
+    }
+}
+
+impl<const N: usize> EncodeValue for ByteArray<N> {
+    fn value_len(&self) -> der::Result<der::Length> {
+        Ok(der::Length::new(self.length as u16))
+    }
+
+    fn encode_value(&self, writer: &mut impl der::Writer) -> der::Result<()> {
+        writer.write(&self.data[..self.length])
     }
 }
 
@@ -157,56 +184,5 @@ impl<const N: usize> Zeroize for ByteArray<N> {
 impl<const N: usize> Default for ByteArray<N> {
     fn default() -> Self {
         ByteArray::new()
-    }
-}
-
-pub mod der {
-    use std::marker::PhantomData;
-
-    use der::{
-        asn1::OctetStringRef, Decode, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length,
-        Reader, Writer,
-    };
-    #[derive(Debug, PartialEq, Eq)]
-    pub struct NestedOctetString<'a, T: Decode<'a> + Encode> {
-        phantom: &'a PhantomData<T>,
-        inner: T,
-    }
-
-    impl<'a, T: Decode<'a> + Encode> EncodeValue for NestedOctetString<'a, T> {
-        fn value_len(&self) -> der::Result<Length> {
-            self.inner.encoded_len()
-        }
-
-        fn encode_value(&self, writer: &mut impl Writer) -> der::Result<()> {
-            self.inner.encode(writer)
-        }
-    }
-
-    impl<'a, T: Decode<'a> + Encode> DecodeValue<'a> for NestedOctetString<'a, T> {
-        fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> der::Result<Self> {
-            let inner = OctetStringRef::decode_value(reader, header)?.decode_into::<T>()?;
-            Ok(Self {
-                inner,
-                phantom: &PhantomData,
-            })
-        }
-    }
-
-    impl<'a> NestedOctetString<'a, OctetStringRef<'a>> {
-        pub fn as_bytes(&self) -> &'a [u8] {
-            self.inner.as_bytes()
-        }
-
-        pub fn new(inner: OctetStringRef<'a>) -> Self {
-            Self {
-                inner,
-                phantom: &PhantomData,
-            }
-        }
-    }
-
-    impl<'a> FixedTag for NestedOctetString<'a, OctetStringRef<'a>> {
-        const TAG: der::Tag = der::Tag::OctetString;
     }
 }
