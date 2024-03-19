@@ -1,8 +1,5 @@
-use crate::{errors::RemoteUnlockError, helper_types::ByteArray};
-use der::{
-    asn1::{OctetString, OctetStringRef},
-    oid::ObjectIdentifier,
-};
+use crate::helper_types::ByteArray;
+use der::oid::ObjectIdentifier;
 
 pub mod types;
 
@@ -16,41 +13,34 @@ impl AlgorithmIdentifier {
         AlgorithmIdentifier { oid }
     }
 }
-#[derive(Debug, PartialEq, Eq, der::Sequence)]
-pub struct DerKeyBorrowed<'a> {
-    version: u8,              // 0
-    oid: AlgorithmIdentifier, // 1.3.101.112
-    key: types::NestedOctetStringRef<OctetStringRef<'a>>,
-}
-
-impl<'a> DerKeyBorrowed<'a> {
-    pub fn as_bytes(&self) -> &[u8] {
-        self.key.as_bytes()
-    }
-
-    pub fn from_key(key: &[u8]) -> Result<DerKeyBorrowed, RemoteUnlockError> {
-        Ok(DerKeyBorrowed {
-            version: 0,
-            oid: AlgorithmIdentifier {
-                oid: ObjectIdentifier::new("1.3.101.112").expect("Invalid OID"),
-            },
-            key: types::NestedOctetStringRef::new(OctetStringRef::new(key)?),
-        })
-    }
-
-    pub fn oid(&self) -> &AlgorithmIdentifier {
-        &self.oid
-    }
-
-    pub fn version(&self) -> u8 {
-        self.version
-    }
-}
 
 // Owned DerKey containing a ByteArray
 #[derive(Debug, PartialEq, Eq, der::Sequence)]
 pub struct DerKey<const N: usize = 1024> {
     version: u8,              // 0
     oid: AlgorithmIdentifier, // AlgoId
-    key: types::NestedOctetStringRef<ByteArray<N>>,
+    key: types::NestedOctetString<ByteArray<N>>,
+}
+
+impl DerKey {
+    pub fn new_from_key(key: &[u8]) -> DerKey {
+        DerKey {
+            version: 0,
+            oid: AlgorithmIdentifier::new(
+                ObjectIdentifier::new("1.3.101.112").expect("Invalid OID"),
+            ),
+            key: types::NestedOctetString::new(ByteArray::new_from_slice(key)),
+        }
+    }
+    pub fn key(&self) -> &[u8] {
+        self.key.as_bytes()
+    }
+
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    pub fn oid(&self) -> &AlgorithmIdentifier {
+        &self.oid
+    }
 }

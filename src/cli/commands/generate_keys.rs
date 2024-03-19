@@ -8,7 +8,7 @@ use std::path::Path;
 pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), RemoteUnlockError> {
     use dryoc::types::Bytes;
     use remote_unlock_lib::{
-        crypto::{der::DerKeyBorrowed, key},
+        crypto::key::{Key, PrivateKeyOwned, PublicKeyOwned},
         helper_types::ByteArray,
     };
 
@@ -20,13 +20,13 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), R
             let mut pubkey_str: [u8; 1024] = [0; 1024];
             let mut privkey_str: [u8; 1024] = [0; 1024];
 
-            let der_pubkey = DerKeyBorrowed::from_key(keypair.public_key.as_slice())?;
-            let der_privkey = DerKeyBorrowed::from_key(keypair.secret_key.as_slice())?;
+            let der_pubkey = PublicKeyOwned::new_from_key(keypair.public_key.as_slice());
+            let der_privkey = PrivateKeyOwned::new_from_key(keypair.secret_key.as_slice());
 
-            let len = key::KeyBorrowed::PublicKey { key: der_pubkey }.to_pem(&mut pubkey_str)?;
+            let len = Key::PublicKey(der_pubkey).to_pem(&mut pubkey_str)?;
             let pubkey_str: ByteArray<1024> = ByteArray::new_from_slice(&pubkey_str[0..len]);
 
-            let len = key::KeyBorrowed::SecretKey { key: der_privkey }.to_pem(&mut privkey_str)?;
+            let len = Key::PrivateKey(der_privkey).to_pem(&mut privkey_str)?;
             let privkey_str: ByteArray<1024> = ByteArray::new_from_slice(&privkey_str[0..len]);
 
             (pubkey_str, privkey_str)

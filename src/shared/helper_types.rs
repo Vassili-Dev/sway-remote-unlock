@@ -1,5 +1,5 @@
 use core::fmt::{self, Debug};
-use der::{DecodeValue, Encode, EncodeValue, FixedTag, Sequence};
+use der::{DecodeValue, EncodeValue, FixedTag};
 use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
 use zeroize::Zeroize;
@@ -62,7 +62,7 @@ impl<const N: usize> FixedTag for ByteArray<N> {
 impl<'a, const N: usize> DecodeValue<'a> for ByteArray<N> {
     fn decode_value<R: der::Reader<'a>>(reader: &mut R, header: der::Header) -> der::Result<Self> {
         let mut data = [0; N];
-        let length = u32::from(reader.input_len()) as usize;
+        let length = u32::from(header.length) as usize;
         assert!(length <= N, "byte array too large");
 
         reader.read_into(&mut data[..length])?;

@@ -1,15 +1,18 @@
-use std::marker::PhantomData;
-
 use der::{
-    asn1::OctetStringRef, Decode, DecodeOwned, DecodeValue, Encode, EncodeValue, FixedTag, Header,
-    Length, Reader, Writer,
+    asn1::OctetStringRef, DecodeOwned, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length,
+    Reader, Writer,
 };
+
+use crate::helper_types::ByteArray;
 #[derive(Debug, PartialEq, Eq)]
-pub struct NestedOctetStringRef<T: for<'a> Decode<'a> + Encode> {
+pub struct NestedOctetString<T>
+where
+    T: DecodeOwned + Encode,
+{
     inner: T,
 }
 
-impl<'a, T: Decode<'a> + Encode> EncodeValue for NestedOctetStringRef<T> {
+impl<T: DecodeOwned + Encode> EncodeValue for NestedOctetString<T> {
     fn value_len(&self) -> der::Result<Length> {
         self.inner.encoded_len()
     }
@@ -19,23 +22,25 @@ impl<'a, T: Decode<'a> + Encode> EncodeValue for NestedOctetStringRef<T> {
     }
 }
 
-impl<'a, T: Decode<'a> + Encode> DecodeValue<'a> for NestedOctetStringRef<T> {
+impl<'a, T: DecodeOwned + Encode> DecodeValue<'a> for NestedOctetString<T> {
     fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> der::Result<Self> {
         let inner = OctetStringRef::decode_value(reader, header)?.decode_into::<T>()?;
         Ok(Self { inner })
     }
 }
 
-impl<'a> NestedOctetStringRef<OctetStringRef<'a>> {
-    pub fn as_bytes(&self) -> &'a [u8] {
-        self.inner.as_bytes()
-    }
+impl<T: DecodeOwned + Encode> FixedTag for NestedOctetString<T> {
+    const TAG: der::Tag = der::Tag::OctetString;
+}
 
-    pub fn new(inner: OctetStringRef<'a>) -> Self {
+impl<T: DecodeOwned + Encode> NestedOctetString<T> {
+    pub fn new(inner: T) -> Self {
         Self { inner }
     }
 }
 
-impl<'a, T: Decode<'a> + Encode> FixedTag for NestedOctetStringRef<T> {
-    const TAG: der::Tag = der::Tag::OctetString;
+impl<const N: usize> NestedOctetString<ByteArray<N>> {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.inner.as_bytes()
+    }
 }
