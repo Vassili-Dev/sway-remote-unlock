@@ -1,16 +1,16 @@
 use core::fmt::{self, Debug};
-use der::{DecodeValue, EncodeValue, FixedTag};
+use der::{Decode, DecodeValue, EncodeValue, Tagged};
 use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
 use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ByteArray<const N: usize> {
+pub struct ByteArray<const N: usize, const T: u8 = 4> {
     data: [u8; N],
     length: usize,
 }
 
-impl<const N: usize> ByteArray<N> {
+impl<const N: usize, const T: u8> ByteArray<N, T> {
     pub fn new() -> Self {
         ByteArray {
             data: [0; N],
@@ -55,11 +55,13 @@ impl<const N: usize> ByteArray<N> {
     }
 }
 
-impl<const N: usize> FixedTag for ByteArray<N> {
-    const TAG: der::Tag = der::Tag::OctetString;
+impl<const N: usize, const T: u8> Tagged for ByteArray<N, T> {
+    fn tag(&self) -> der::Tag {
+        der::Tag::try_from(T).unwrap()
+    }
 }
 
-impl<'a, const N: usize> DecodeValue<'a> for ByteArray<N> {
+impl<'a, const N: usize, const T: u8> DecodeValue<'a> for ByteArray<N, T> {
     fn decode_value<R: der::Reader<'a>>(reader: &mut R, header: der::Header) -> der::Result<Self> {
         let mut data = [0; N];
         let length = u32::from(header.length) as usize;
@@ -71,7 +73,20 @@ impl<'a, const N: usize> DecodeValue<'a> for ByteArray<N> {
     }
 }
 
-impl<const N: usize> EncodeValue for ByteArray<N> {
+impl<'a, const N: usize, const T: u8> Decode<'a> for ByteArray<N, T> {
+    fn decode<R: der::Reader<'a>>(reader: &mut R) -> der::Result<Self> {
+        let header = der::Header::decode(reader)?;
+        let mut data = [0; N];
+        let length = u32::from(header.length) as usize;
+        assert!(length <= N, "byte array too large");
+
+        reader.read_into(&mut data[..length])?;
+
+        Ok(ByteArray { data, length })
+    }
+}
+
+impl<const N: usize, const T: u8> EncodeValue for ByteArray<N, T> {
     fn value_len(&self) -> der::Result<der::Length> {
         Ok(der::Length::new(self.length as u16))
     }

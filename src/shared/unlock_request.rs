@@ -1,14 +1,12 @@
-use std::mem::size_of;
-
 use crate::helper_types::ByteArray;
 use dryoc::{classic::crypto_sign_ed25519::Signature, sign::SignedMessage, types::NewByteArray};
 
 // Serial format: {"id":"...","nonce":...}
-const SERIAL_LEN: usize = size_of::<u8>() * 21 + size_of::<u128>();
+const SERIAL_LEN: usize = 1024;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct UnlockRequest {
-    id: ByteArray<3>,
+    id: ByteArray<16>,
     nonce: u128,
 }
 

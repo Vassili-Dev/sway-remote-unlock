@@ -1,6 +1,5 @@
 use der::{
-    asn1::OctetStringRef, DecodeOwned, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length,
-    Reader, Writer,
+    DecodeOwned, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length, Reader, Tagged, Writer,
 };
 
 use crate::helper_types::ByteArray;
@@ -22,9 +21,9 @@ impl<T: DecodeOwned + Encode> EncodeValue for NestedOctetString<T> {
     }
 }
 
-impl<'a, T: DecodeOwned + Encode> DecodeValue<'a> for NestedOctetString<T> {
+impl<'a, T: DecodeOwned + Encode + Tagged> DecodeValue<'a> for NestedOctetString<T> {
     fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> der::Result<Self> {
-        let inner = OctetStringRef::decode_value(reader, header)?.decode_into::<T>()?;
+        let inner = reader.read_nested(header.length, T::decode)?;
         Ok(Self { inner })
     }
 }
@@ -39,7 +38,13 @@ impl<T: DecodeOwned + Encode> NestedOctetString<T> {
     }
 }
 
-impl<const N: usize> NestedOctetString<ByteArray<N>> {
+impl<const N: usize> NestedOctetString<ByteArray<N, 4>> {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.inner.as_bytes()
+    }
+}
+
+impl<const N: usize> NestedOctetString<ByteArray<N, 3>> {
     pub fn as_bytes(&self) -> &[u8] {
         self.inner.as_bytes()
     }

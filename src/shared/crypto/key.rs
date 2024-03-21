@@ -61,13 +61,13 @@ impl Encode for PublicKeyOwned {
 
 impl PublicKeyOwned {
     pub fn new_from_key(key: &[u8]) -> Self {
-        Self(DerKey::new_from_key(key))
+        Self(DerKey::new_from_key_bits(key))
     }
 }
 
 impl PrivateKeyOwned {
     pub fn new_from_key(key: &[u8]) -> Self {
-        Self(DerKey::new_from_key(key))
+        Self(DerKey::new_from_key_bytes(key))
     }
 }
 
@@ -135,38 +135,41 @@ mod tests {
 
     use super::Key;
 
-    // 302e020100300506032b657004220420e6d402bca22a67721c8ce8b1ff7ac6b4a556462f558fac148da972992b6f32df
-    const KEY: [u8; 48] = [
-        0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04,
-        0x20, 0xe6, 0xd4, 0x02, 0xbc, 0xa2, 0x2a, 0x67, 0x72, 0x1c, 0x8c, 0xe8, 0xb1, 0xff, 0x7a,
-        0xc6, 0xb4, 0xa5, 0x56, 0x46, 0x2f, 0x55, 0x8f, 0xac, 0x14, 0x8d, 0xa9, 0x72, 0x99, 0x2b,
-        0x6f, 0x32, 0xdf,
-    ];
-
+    const DER_KEY_FILE: &'static [u8] = include_bytes!("../../../test_data/der_test");
+    const DER_EXPECTED_KEY: &'static [u8] = include_bytes!("../../../test_data/der_expected_key");
     #[test]
     fn test_parse_der() {
-        let key = DerKey::from_der(&KEY).unwrap();
+        let key = DerKey::from_der(DER_KEY_FILE).unwrap();
         assert_eq!(key.version(), 0);
         assert_eq!(
             *key.oid(),
             AlgorithmIdentifier::new(ObjectIdentifier::new("1.3.101.112").expect("Invalid OID"))
         );
-        assert_eq!(key.key(), &KEY[16..]);
+        assert_eq!(key.key(), DER_EXPECTED_KEY);
     }
 
-    const KEY_PEM: &'static str = "-----BEGIN PUBLIC KEY-----
-MC4CAQAwBQYDK2VwBCIEIKoqSsjwM1ZKfRLiCl2uvlshQnkX3nOgn1bNQOKUPHY2
------END PUBLIC KEY-----";
+    const PEM_PRIVATE: &'static str = include_str!("../../../test_data/pem_test");
+    const PEM_EXPECTED_PRIVATE_KEY: &'static [u8] =
+        include_bytes!("../../../test_data/pem_expected_private_key");
 
-    // aa2a4ac8f033564a7d12e20a5daebe5b21427917de73a09f56cd40e2943c7636
-    const EXCPECTED_KEY: [u8; 32] = [
-        0xaa, 0x2a, 0x4a, 0xc8, 0xf0, 0x33, 0x56, 0x4a, 0x7d, 0x12, 0xe2, 0x0a, 0x5d, 0xae, 0xbe,
-        0x5b, 0x21, 0x42, 0x79, 0x17, 0xde, 0x73, 0xa0, 0x9f, 0x56, 0xcd, 0x40, 0xe2, 0x94, 0x3c,
-        0x76, 0x36,
-    ];
     #[test]
-    fn test_parse_pem() {
-        let key = Key::public_from_pem(KEY_PEM.as_bytes()).unwrap();
-        assert_eq!(key.key(), &EXCPECTED_KEY);
+    fn test_parse_private_pem() {
+        let key = Key::private_from_pem(PEM_PRIVATE.as_bytes()).unwrap();
+        assert_eq!(key.key(), PEM_EXPECTED_PRIVATE_KEY);
+    }
+
+    #[test]
+    fn test_reject_private_key_as_public() {
+        let key = Key::public_from_pem(PEM_PRIVATE.as_bytes());
+        assert!(key.is_err());
+    }
+
+    const PEM_PUBLIC: &'static str = include_str!("../../../test_data/pem_test.pub");
+    const PEM_EXPECTED_PUBLIC_KEY: &'static [u8] =
+        include_bytes!("../../../test_data/pem_expected_public_key");
+    #[test]
+    fn test_parse_public_pem() {
+        let key = Key::public_from_pem(PEM_PUBLIC.as_bytes()).unwrap();
+        assert_eq!(key.key(), PEM_EXPECTED_PUBLIC_KEY);
     }
 }
