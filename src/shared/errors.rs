@@ -1,3 +1,5 @@
+use std::str::Utf8Error;
+
 #[derive(Debug)]
 pub enum RemoteUnlockError {
     SocketError(std::io::Error),
@@ -61,5 +63,11 @@ impl From<httparse::Error> for RemoteUnlockError {
 impl From<der::Error> for RemoteUnlockError {
     fn from(err: der::Error) -> RemoteUnlockError {
         RemoteUnlockError::KeyParseError(err)
+    }
+}
+
+impl From<Utf8Error> for RemoteUnlockError {
+    fn from(_: Utf8Error) -> RemoteUnlockError {
+        RemoteUnlockError::ServerError("Invalid UTF-8".to_string())
     }
 }

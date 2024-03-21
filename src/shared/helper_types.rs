@@ -1,7 +1,9 @@
 use core::fmt::{self, Debug};
-use der::{Decode, DecodeValue, EncodeValue, Tagged};
+use der::{DecodeValue, EncodeValue, FixedTag};
 use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
+use std::io::Read;
+use std::io::Write;
 use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,27 +57,39 @@ impl<const N: usize, const T: u8> ByteArray<N, T> {
     }
 }
 
-impl<const N: usize, const T: u8> Tagged for ByteArray<N, T> {
-    fn tag(&self) -> der::Tag {
-        der::Tag::try_from(T).unwrap()
+impl<const N: usize, const T: u8> Write for ByteArray<N, T> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let len = core::cmp::min(buf.len(), N - self.length);
+        self.data[self.length..self.length + len].copy_from_slice(&buf[..len]);
+        self.length += len;
+        Ok(len)
     }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<const N: usize, const T: u8> Read for ByteArray<N, T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let len = core::cmp::min(buf.len(), self.length);
+        buf[..len].copy_from_slice(&self.data[..len]);
+        self.data.copy_within(len..self.length, 0);
+        self.length -= len;
+        Ok(len)
+    }
+}
+
+impl<const N: usize> FixedTag for ByteArray<N, 4> {
+    const TAG: der::Tag = der::Tag::OctetString;
+}
+
+impl<const N: usize> FixedTag for ByteArray<N, 3> {
+    const TAG: der::Tag = der::Tag::BitString;
 }
 
 impl<'a, const N: usize, const T: u8> DecodeValue<'a> for ByteArray<N, T> {
     fn decode_value<R: der::Reader<'a>>(reader: &mut R, header: der::Header) -> der::Result<Self> {
-        let mut data = [0; N];
-        let length = u32::from(header.length) as usize;
-        assert!(length <= N, "byte array too large");
-
-        reader.read_into(&mut data[..length])?;
-
-        Ok(ByteArray { data, length })
-    }
-}
-
-impl<'a, const N: usize, const T: u8> Decode<'a> for ByteArray<N, T> {
-    fn decode<R: der::Reader<'a>>(reader: &mut R) -> der::Result<Self> {
-        let header = der::Header::decode(reader)?;
         let mut data = [0; N];
         let length = u32::from(header.length) as usize;
         assert!(length <= N, "byte array too large");
