@@ -1,40 +1,19 @@
 use crate::args::{GenerateKeysCommand, KeyFormat};
-use dryoc::sign::{PublicKey, SecretKey};
+use rand::rngs::OsRng;
 use remote_unlock_lib::config::Config;
 use remote_unlock_lib::errors::RemoteUnlockError;
 use std::path::Path;
 
 #[cfg(debug_assertions)]
 pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), RemoteUnlockError> {
-    use dryoc::types::Bytes;
-    use remote_unlock_lib::{
-        crypto::key::{Key, PrivateKeyOwned, PublicKeyOwned},
-        helper_types::ByteArray,
-    };
+    use pkcs8::{EncodePrivateKey, EncodePublicKey};
+    use remote_unlock_lib::crypto::key::{PrivateKey, PublicKey};
 
-    let keypair: dryoc::sign::SigningKeyPair<PublicKey, SecretKey> =
-        dryoc::sign::SigningKeyPair::gen();
+    let privkey = p256::SecretKey::random(&mut OsRng);
+    let pubkey = privkey.public_key();
 
-    let (pubkey_str, privkey_str) = match args.format {
-        KeyFormat::PEM => {
-            let mut pubkey_str: [u8; 1024] = [0; 1024];
-            let mut privkey_str: [u8; 1024] = [0; 1024];
-
-            let der_pubkey = PublicKeyOwned::new_from_key(keypair.public_key.as_slice());
-            let der_privkey = PrivateKeyOwned::new_from_key(keypair.secret_key.as_slice());
-
-            let len = Key::PublicKey(der_pubkey).to_pem(&mut pubkey_str)?;
-            let pubkey_str: ByteArray<1024> = ByteArray::new_from_slice(&pubkey_str[0..len]);
-
-            let len = Key::PrivateKey(der_privkey).to_pem(&mut privkey_str)?;
-            let privkey_str: ByteArray<1024> = ByteArray::new_from_slice(&privkey_str[0..len]);
-
-            (pubkey_str, privkey_str)
-        }
-        _ => {
-            unimplemented!("Key format not implemented");
-        }
-    };
+    let pubkey = PublicKey::from_der(pubkey.to_public_key_der()?.as_bytes())?;
+    let privkey = PrivateKey::from_der(privkey.to_pkcs8_der()?.as_bytes())?;
 
     match args.output {
         Some(ref output) => {
@@ -54,13 +33,29 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), R
                 return Err(RemoteUnlockError::KeyExists(format!("{}.pub", output)));
             }
 
-            std::fs::write(public_key_path, pubkey_str.as_str())?;
-            std::fs::write(private_key_path, privkey_str.as_str())?;
+            match args.format {
+                KeyFormat::DER => {
+                    pubkey.save_to_der_file(public_key_path.as_path())?;
+                    privkey.save_to_der_file(private_key_path.as_path())?;
+                }
+                KeyFormat::PEM => {
+                    pubkey.save_to_pem_file(public_key_path.as_path())?;
+                    privkey.save_to_pem_file(private_key_path.as_path())?;
+                }
+            }
         }
         None => {
             // Print to stdout
-            println!("{}", pubkey_str.as_str());
-            println!("{}", privkey_str.as_str());
+            match args.format {
+                KeyFormat::DER => {
+                    pubkey.der()?.to_stdout_raw();
+                    privkey.der()?.to_stdout_raw();
+                }
+                KeyFormat::PEM => {
+                    println!("{}", pubkey.pem()?.as_str());
+                    println!("{}", privkey.pem()?.as_str());
+                }
+            }
         }
     }
     Ok(())

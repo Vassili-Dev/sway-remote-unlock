@@ -11,6 +11,8 @@ pub enum RemoteUnlockError {
     HTTParseError(httparse::Error),
     KeyExists(String),
     KeyParseError(der::Error),
+    PKCS8Error(pkcs8::Error),
+    SPKIError(spki::Error),
 }
 
 impl std::fmt::Display for RemoteUnlockError {
@@ -42,6 +44,12 @@ impl std::fmt::Display for RemoteUnlockError {
             RemoteUnlockError::KeyParseError(e) => {
                 write!(f, "RemoteUnlock -- KeyParseError: {}", e)
             }
+            RemoteUnlockError::PKCS8Error(e) => {
+                write!(f, "RemoteUnlock -- PKCS8Error: {}", e)
+            }
+            RemoteUnlockError::SPKIError(e) => {
+                write!(f, "RemoteUnlock -- SPKIError: {}", e)
+            }
         }
     }
 }
@@ -69,5 +77,23 @@ impl From<der::Error> for RemoteUnlockError {
 impl From<Utf8Error> for RemoteUnlockError {
     fn from(_: Utf8Error) -> RemoteUnlockError {
         RemoteUnlockError::ServerError("Invalid UTF-8".to_string())
+    }
+}
+
+impl From<der::pem::Error> for RemoteUnlockError {
+    fn from(err: der::pem::Error) -> RemoteUnlockError {
+        RemoteUnlockError::KeyParseError(err.into())
+    }
+}
+
+impl From<pkcs8::Error> for RemoteUnlockError {
+    fn from(err: pkcs8::Error) -> RemoteUnlockError {
+        RemoteUnlockError::PKCS8Error(err)
+    }
+}
+
+impl From<spki::Error> for RemoteUnlockError {
+    fn from(err: spki::Error) -> RemoteUnlockError {
+        RemoteUnlockError::SPKIError(err)
     }
 }

@@ -2,9 +2,9 @@ mod args;
 mod commands;
 use args::{Cli, Command};
 use clap::Parser;
-use remote_unlock_lib::config::Config;
+use remote_unlock_lib::{config::Config, errors::RemoteUnlockError};
 
-fn main() {
+fn main() -> Result<(), RemoteUnlockError> {
     let config = Config::new();
     let args = Cli::parse();
 
@@ -17,5 +17,7 @@ fn main() {
             commands::generate_keys(&config, generate_keys).unwrap();
         }
         Command::Terminate(_) => {}
-    }
+    };
+
+    Ok(())
 }

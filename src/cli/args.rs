@@ -44,6 +44,5 @@ pub struct GenerateKeysCommand {
 #[derive(ValueEnum, Clone, Debug)]
 pub enum KeyFormat {
     PEM,
-    DIR,
-    BIN,
+    DER,
 }

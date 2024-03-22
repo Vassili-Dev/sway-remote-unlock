@@ -1,7 +1,8 @@
 use core::fmt::{self, Debug};
-use der::{DecodeValue, EncodeValue, FixedTag};
+use der::{Decode, DecodeValue, EncodeValue, FixedTag};
 use serde::de::{Deserialize, Deserializer, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
+use spki::EncodePublicKey;
 use std::io::Read;
 use std::io::Write;
 use zeroize::Zeroize;
@@ -38,6 +39,12 @@ impl<const N: usize, const T: u8> ByteArray<N, T> {
     }
     pub fn as_str(&self) -> &str {
         core::str::from_utf8(&self.data[..self.length]).unwrap()
+    }
+
+    pub fn to_stdout_raw(&self) {
+        let mut stdout = std::io::stdout().lock();
+        stdout.write_all(&self.data[..self.length]).unwrap();
+        stdout.write_all(b"\n").unwrap();
     }
 
     pub fn copy_from_slice(&mut self, slice: &[u8]) {
@@ -213,5 +220,12 @@ impl<const N: usize> Zeroize for ByteArray<N> {
 impl<const N: usize> Default for ByteArray<N> {
     fn default() -> Self {
         ByteArray::new()
+    }
+}
+
+impl<const N: usize, const T: u8> EncodePublicKey for ByteArray<N, T> {
+    fn to_public_key_der(&self) -> spki::Result<der::Document> {
+        let doc = der::Document::from_der(self.as_bytes())?;
+        Ok(doc)
     }
 }
