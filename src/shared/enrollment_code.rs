@@ -27,6 +27,10 @@ impl EnrollmentCode {
     pub fn verify(&self, code: &u32) -> bool {
         !self.expired() && self.code == *code
     }
+
+    pub fn code(&self) -> u32 {
+        self.code
+    }
 }
 
 impl Display for EnrollmentCode {

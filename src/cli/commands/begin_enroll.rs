@@ -1,28 +1,23 @@
-use remote_unlock_lib::config::Config;
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
-use remote_unlock_lib::errors::RemoteUnlockError;
-use remote_unlock_lib::helper_types::ByteArray;
 use remote_unlock_lib::net::request::Request;
 use remote_unlock_lib::net::response::Response;
 use remote_unlock_lib::net::status::Status;
+use remote_unlock_lib::prelude::*;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 
-pub fn begin_enroll(config: &Config) -> Result<(), RemoteUnlockError> {
+pub fn begin_enroll(config: &Config) -> Result<(), Error> {
     let mut stream = UnixStream::connect(config.socket_path()).unwrap();
     let mut req = Request::new();
-    req.method = Some(ByteArray::new_from_slice("POST".as_bytes()));
-    req.path = Some(ByteArray::new_from_slice("/begin_enroll".as_bytes()));
+    req.method = Some(ByteArray::try_from("POST".as_bytes())?);
+    req.path = Some(ByteArray::try_from("/begin_enroll".as_bytes())?);
 
     req.to_writer(&mut stream).unwrap();
     stream.shutdown(Shutdown::Write).unwrap();
     let response = Response::from_stream(&mut stream).unwrap();
 
     if response.status != Status::Ok {
-        let err = RemoteUnlockError::ServerError(format!(
-            "Server returned status code {}",
-            response.status.to_u16()
-        ));
+        let err = Error::new(ErrorKind::Server, Some(response.status.to_string()));
         return Err(err);
     }
 

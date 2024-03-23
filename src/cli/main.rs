@@ -2,9 +2,9 @@ mod args;
 mod commands;
 use args::{Cli, Command};
 use clap::Parser;
-use remote_unlock_lib::{config::Config, errors::RemoteUnlockError};
+use remote_unlock_lib::prelude::*;
 
-fn main() -> Result<(), RemoteUnlockError> {
+fn main() -> Result<(), Error> {
     let config = Config::new();
     let args = Cli::parse();
 

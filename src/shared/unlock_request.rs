@@ -1,30 +1,36 @@
-use crate::helper_types::ByteArray;
-use dryoc::{classic::crypto_sign_ed25519::Signature, sign::SignedMessage, types::NewByteArray};
+use crate::prelude::*;
+
+use p256::ecdsa::{self, signature::Verifier, VerifyingKey};
+use spki::DecodePublicKey;
 
 // Serial format: {"id":"...","nonce":...}
 const SERIAL_LEN: usize = 1024;
 
-#[derive(Debug, serde::Deserialize)]
-pub struct UnlockRequest {
-    id: ByteArray<16>,
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct UnlockRequest<'a> {
+    id: &'a str,
     nonce: u128,
 }
 
-impl UnlockRequest {
-    pub fn verify(&self, signature: &[u8], pubkey: &crate::pubkey::Pubkey) -> bool {
+impl<'a> UnlockRequest<'a> {
+    pub fn verify(
+        &self,
+        signature: &[u8],
+        pubkey: &crate::crypto::key::PublicKey,
+    ) -> Result<bool, Error> {
         let mut serial: ByteArray<SERIAL_LEN> = ByteArray::new();
-        serial.append_slice("{\"id\":\"".as_bytes());
-        serial.append_slice(self.id.as_bytes());
-        serial.append_slice(&self.nonce.to_be_bytes());
-        serial.append_slice("\"}".as_bytes());
 
-        let public_key: dryoc::sign::PublicKey = pubkey.into();
-        let mut dryoc_signature = Signature::new_byte_array();
-        dryoc_signature.copy_from_slice(signature);
+        serde_json::to_writer(&mut serial, self)?;
 
-        let message = SignedMessage::from_parts(dryoc_signature, serial);
+        let verifying_key: VerifyingKey =
+            p256::PublicKey::from_public_key_der(pubkey.der()?.as_bytes())?.into();
 
-        message.verify(&public_key).map_or(false, |_v| true)
+        let signature = ecdsa::Signature::from_der(signature)?;
+
+        match verifying_key.verify(serial.as_bytes(), &signature) {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
     }
 
     pub fn id(&self) -> &[u8] {
@@ -34,39 +40,35 @@ impl UnlockRequest {
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::key::PublicKey;
+
     use super::*;
-    use crate::pubkey::Pubkey;
-    use dryoc::{
-        classic::crypto_sign::PublicKey,
-        sign::{SecretKey, Signature, SigningKeyPair},
-        types::ByteArray,
-    };
+
+    use p256::ecdsa::SigningKey;
+    use rand::rngs::OsRng;
+    use spki::EncodePublicKey;
 
     #[test]
     fn test_verify() {
-        let key_pair: SigningKeyPair<[u8; 32], SecretKey> = SigningKeyPair::gen();
-        let public_key: PublicKey = key_pair.public_key;
-        let mut pubkey = Pubkey::new();
-        pubkey.read_from_bytes(&public_key);
-
+        let signing_key = SigningKey::random(&mut OsRng);
+        let verifying_key = signing_key.verifying_key();
         let unlock_request = UnlockRequest {
-            id: crate::helper_types::ByteArray::new_from_slice("test".as_bytes()),
+            id: "test",
             nonce: 0,
         };
 
-        let mut serial: crate::helper_types::ByteArray<SERIAL_LEN> =
-            crate::helper_types::ByteArray::new();
-        serial.append_slice("{\"id\":\"".as_bytes());
-        serial.append_slice(unlock_request.id.as_bytes());
-        serial.append_slice(&unlock_request.nonce.to_be_bytes());
-        serial.append_slice("\"}".as_bytes());
+        let mut serial: ByteArray<SERIAL_LEN> = ByteArray::new();
 
-        let signed: SignedMessage<Signature, crate::helper_types::ByteArray<SERIAL_LEN>> =
-            key_pair.sign(serial).unwrap();
-        let (signature, _message) = signed.into_parts();
-        let signature: &[u8] = signature.as_array();
+        serde_json::to_writer(&mut serial, &unlock_request).unwrap();
 
-        let valid = unlock_request.verify(signature, &pubkey);
+        let (signature, _) = signing_key.sign_recoverable(serial.as_bytes()).unwrap();
+
+        let pubkey =
+            PublicKey::from_der(verifying_key.to_public_key_der().unwrap().as_bytes()).unwrap();
+
+        let valid = unlock_request
+            .verify(signature.to_der().as_bytes(), &pubkey)
+            .unwrap();
         assert!(valid);
     }
 }

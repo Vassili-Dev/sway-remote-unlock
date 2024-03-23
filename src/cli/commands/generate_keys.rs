@@ -1,11 +1,10 @@
 use crate::args::{GenerateKeysCommand, KeyFormat};
 use rand::rngs::OsRng;
-use remote_unlock_lib::config::Config;
-use remote_unlock_lib::errors::RemoteUnlockError;
+use remote_unlock_lib::prelude::*;
 use std::path::Path;
 
 #[cfg(debug_assertions)]
-pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), RemoteUnlockError> {
+pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), Error> {
     use pkcs8::{EncodePrivateKey, EncodePublicKey};
     use remote_unlock_lib::crypto::key::{PrivateKey, PublicKey};
 
@@ -27,10 +26,10 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), R
                 Path::new(&config.generated_keys_dir()).join(format!("{}", output));
 
             if private_key_path.exists() && !args.force {
-                return Err(RemoteUnlockError::KeyExists(output.to_owned()));
+                return Err(Error::new(ErrorKind::KeyExists, Some(output)));
             }
             if public_key_path.exists() && !args.force {
-                return Err(RemoteUnlockError::KeyExists(format!("{}.pub", output)));
+                return Err(Error::new(ErrorKind::KeyExists, Some(output)));
             }
 
             match args.format {
@@ -48,12 +47,12 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), R
             // Print to stdout
             match args.format {
                 KeyFormat::DER => {
-                    pubkey.der()?.to_stdout_raw();
-                    privkey.der()?.to_stdout_raw();
+                    pubkey.der()?.to_stdout_raw()?;
+                    privkey.der()?.to_stdout_raw()?;
                 }
                 KeyFormat::PEM => {
-                    println!("{}", pubkey.pem()?.as_str());
-                    println!("{}", privkey.pem()?.as_str());
+                    println!("{}", pubkey.pem()?.as_str()?);
+                    println!("{}", privkey.pem()?.as_str()?);
                 }
             }
         }

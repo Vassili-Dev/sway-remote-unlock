@@ -1,10 +1,10 @@
-use std::{io::Write, thread};
+use crate::prelude::*;
 
-use crate::{config::Config, errors::RemoteUnlockError, helper_types::ByteArray};
+use std::{io::Write, thread};
 
 use super::headers::Header;
 
-pub struct Request<const HV: usize = 64> {
+pub struct Request<const HV: usize = { 64 * 2 }> {
     pub path: Option<ByteArray<128>>,
     pub method: Option<ByteArray<16>>,
     pub headers: [Option<Header<32, HV>>; 16],
@@ -24,6 +24,7 @@ impl Write for Request {
         self.body[self.body_written..self.body_written + write_amt]
             .copy_from_slice(&buf[..write_amt]);
         self.body_written += write_amt;
+        self.body_len = self.body_written;
 
         Ok(write_amt)
     }
@@ -46,34 +47,36 @@ impl Request {
         }
     }
 
-    pub fn add_header(&mut self, name: &'static str, value: &'static str) {
+    pub fn add_header(&mut self, name: &str, value: &str) -> Result<(), Error> {
         for header in self.headers.iter_mut() {
             match header {
                 Some(header) => {
-                    if header.name.as_str() == name {
-                        header.value.copy_from_slice(value.as_bytes());
-                        return;
+                    if header.name.as_str()? == name {
+                        header.value.copy_from_slice(value.as_bytes())?;
+                        return Ok(());
                     }
                 }
                 None => {
                     let mut new_header = Header::new();
-                    new_header.name.copy_from_slice(name.as_bytes());
-                    new_header.value.copy_from_slice(value.as_bytes());
+                    new_header.name.copy_from_slice(name.as_bytes())?;
+                    new_header.value.copy_from_slice(value.as_bytes())?;
                     *header = Some(new_header);
                     self.num_headers += 1;
-                    return;
+                    return Ok(());
                 }
             }
         }
+
+        Ok(())
     }
 
-    pub fn to_writer(&self, writer: &mut impl Write) -> std::io::Result<()> {
+    pub fn to_writer(&self, writer: &mut impl Write) -> Result<(), Error> {
         let path = match self.path.as_ref() {
-            Some(path) => path.as_str(),
+            Some(path) => path.as_str()?,
             None => "/",
         };
         let method = match self.method.as_ref() {
-            Some(method) => method.as_str(),
+            Some(method) => method.as_str()?,
             None => "GET",
         };
 
@@ -84,8 +87,8 @@ impl Request {
                 Some(header) => {
                     writer.write_fmt(format_args!(
                         "{}: {}\r\n",
-                        header.name.as_str(),
-                        header.value.as_str()
+                        header.name.as_str()?,
+                        header.value.as_str()?
                     ))?;
                 }
                 None => break,
@@ -98,7 +101,7 @@ impl Request {
         Ok(())
     }
 
-    pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Request, RemoteUnlockError> {
+    pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Request, Error> {
         let mut ret = Request::new();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
@@ -106,7 +109,7 @@ impl Request {
         // Read into buffer until stream is empty
         loop {
             if buf_ptr >= Config::MAX_PACKET_SIZE {
-                return Err(RemoteUnlockError::OversizePacketError);
+                return Err(ErrorKind::OversizePacket.into());
             }
             let (_, remaining) = buf.split_at_mut(buf_ptr);
             let read_amt = match stream.read(remaining) {
@@ -138,24 +141,40 @@ impl Request {
         let mut req = httparse::Request::new(&mut headers);
         let status = match req.parse(&buf) {
             Ok(httparse::Status::Complete(i)) => i,
-            Ok(httparse::Status::Partial) => return Err(RemoteUnlockError::IncompleteRequestError),
+            Ok(httparse::Status::Partial) => return Err(ErrorKind::IncompleteRequest.into()),
             Err(e) => return Err(e.into()),
         };
 
-        ret.path = Some(ByteArray::new_from_slice(req.path.unwrap().as_bytes()));
-        ret.method = Some(ByteArray::new_from_slice(req.method.unwrap().as_bytes()));
+        ret.path = Some(ByteArray::try_from(
+            req.path
+                .ok_or(Error::new(ErrorKind::Server, Some("Path missing")))?
+                .as_bytes(),
+        )?);
+        ret.method = Some(ByteArray::try_from(
+            req.method
+                .ok_or(Error::new(ErrorKind::Server, Some("Method missing")))?
+                .as_bytes(),
+        )?);
 
-        let content_length = req
+        let content_length = match req
             .headers
             .iter()
             .find(|header| header.name == "Content-Length")
-            .unwrap()
-            .value;
+        {
+            Some(header) => header.value,
+            None => b"0",
+        };
 
-        let content_length = std::str::from_utf8(content_length)
-            .unwrap()
+        let content_length = std::str::from_utf8(content_length)?
             .parse::<usize>()
-            .unwrap();
+            .unwrap_or(0);
+
+        for header in req.headers {
+            if !header.name.is_empty() {
+                let hv = std::str::from_utf8(header.value)?;
+                ret.add_header(header.name, hv)?;
+            }
+        }
 
         let body_start_ptr = status;
         let body_end_ptr = status + content_length;

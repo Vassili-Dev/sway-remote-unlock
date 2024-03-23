@@ -1,4 +1,4 @@
-use crate::{errors::RemoteUnlockError, helper_types::ByteArray};
+use crate::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Header<const N: usize = 32, const V: usize = 64> {
@@ -51,7 +51,7 @@ impl<const N: usize, const V: usize> Header<N, V> {
         Ok(header)
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Header<N, V>, RemoteUnlockError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Header<N, V>, Error> {
         let mut header = Header::new();
         let mut name = true;
         let mut name_len = 0;
@@ -72,8 +72,9 @@ impl<const N: usize, const V: usize> Header<N, V> {
             }
 
             if (name && name_len == N) || (value_len == V) {
-                return Err(RemoteUnlockError::ServerError(
-                    "Header name or value too long".to_string(),
+                return Err(Error::new(
+                    ErrorKind::Server,
+                    Some("Header name or value too long"),
                 ));
             }
 

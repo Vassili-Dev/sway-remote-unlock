@@ -1,4 +1,4 @@
-use crate::{config::Config, errors::RemoteUnlockError};
+use crate::prelude::*;
 
 use super::{headers::Header, status::Status};
 use std::{io::Write, thread};
@@ -46,28 +46,30 @@ impl Response {
         }
     }
 
-    pub fn add_header(&mut self, name: &'static str, value: &'static str) {
+    pub fn add_header(&mut self, name: &'static str, value: &'static str) -> Result<(), Error> {
         for header in self.headers.iter_mut() {
             match header {
                 Some(header) => {
-                    if header.name.as_str() == name {
-                        header.value.copy_from_slice(value.as_bytes());
-                        return;
+                    if header.name.as_str()? == name {
+                        header.value.copy_from_slice(value.as_bytes())?;
+                        return Ok(());
                     }
                 }
                 None => {
                     let mut new_header = Header::new();
-                    new_header.name.copy_from_slice(name.as_bytes());
-                    new_header.value.copy_from_slice(value.as_bytes());
+                    new_header.name.copy_from_slice(name.as_bytes())?;
+                    new_header.value.copy_from_slice(value.as_bytes())?;
                     *header = Some(new_header);
                     self.num_headers += 1;
-                    return;
+                    return Ok(());
                 }
-            }
+            };
         }
+
+        Err(Error::new(ErrorKind::Server, Some("Too many headers")))
     }
 
-    pub fn to_writer(&self, writer: &mut impl Write) -> std::io::Result<()> {
+    pub fn to_writer(&self, writer: &mut impl Write) -> Result<(), Error> {
         writer.write_fmt(format_args!(
             "HTTP/1.1 {} {}\r\n",
             self.status.to_u16(),
@@ -78,8 +80,8 @@ impl Response {
                 Some(header) => {
                     writer.write_fmt(format_args!(
                         "{}: {}\r\n",
-                        header.name.as_str(),
-                        header.value.as_str()
+                        header.name.as_str()?,
+                        header.value.as_str()?
                     ))?;
                 }
                 None => break,
@@ -92,7 +94,7 @@ impl Response {
         Ok(())
     }
 
-    pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Response, RemoteUnlockError> {
+    pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Response, Error> {
         let mut ret = Response::new();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
@@ -100,7 +102,7 @@ impl Response {
         // Read response into buffer
         loop {
             if buf_ptr >= Config::MAX_PACKET_SIZE {
-                return Err(RemoteUnlockError::OversizePacketError);
+                return Err(ErrorKind::OversizePacket.into());
             }
             let (_, remaining) = buf.split_at_mut(buf_ptr);
             let read_amt = match stream.read(remaining) {
@@ -131,16 +133,27 @@ impl Response {
         let mut response = httparse::Response::new(&mut headers);
         let status = match response.parse(&buf) {
             Ok(httparse::Status::Complete(i)) => i,
-            Ok(httparse::Status::Partial) => return Err(RemoteUnlockError::IncompleteRequestError),
+            Ok(httparse::Status::Partial) => return Err(ErrorKind::IncompleteRequest.into()),
             Err(e) => return Err(e.into()),
         };
 
-        if response.code.unwrap() != 200 {
-            let err = RemoteUnlockError::ServerError(format!(
-                "Server returned status code {}",
-                response.code.unwrap()
-            ));
-            return Err(err);
+        let code = response.code.ok_or(Error::new(
+            ErrorKind::Server,
+            Some("No status code in response"),
+        ))?;
+
+        if code != 200 {
+            let code_str: ByteArray<5> = ByteArrayString::try_from(code)?.into();
+            let message: ByteArray<{ Config::ERROR_STRING_SIZE }> =
+                ByteArrayString::<{ Config::ERROR_STRING_SIZE }>::try_from(
+                    "Server returned status code",
+                )?
+                .into();
+
+            let mut message = ByteArray::from(message);
+            message.append_slice(code_str.as_bytes())?;
+
+            return Err(Error::new(ErrorKind::Server, Some(message.as_str()?)));
         }
 
         let content_length = response

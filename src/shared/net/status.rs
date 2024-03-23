@@ -1,4 +1,4 @@
-use crate::errors::RemoteUnlockError;
+use crate::prelude::*;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -24,17 +24,20 @@ impl Status {
         *self as u16
     }
 
-    pub fn from_u16(code: u16) -> Result<Status, RemoteUnlockError> {
+    pub fn from_u16(code: u16) -> Result<Status, Error> {
         match code {
             200 => Ok(Status::Ok),
             400 => Ok(Status::BadRequest),
             403 => Ok(Status::Forbidden),
             404 => Ok(Status::NotFound),
             500 => Ok(Status::InternalServerError),
-            _ => Err(RemoteUnlockError::ServerError(format!(
-                "Unknown status code: {}",
-                code
-            ))),
+            _ => {
+                let code_str = ByteArray::<5>::from(ByteArrayString::try_from(code)?);
+                Err(Error::new(
+                    ErrorKind::UnkownStatus,
+                    Some(code_str.as_str()?),
+                ))
+            }
         }
     }
 }

@@ -1,8 +1,7 @@
 use remote_unlock_lib::{
-    config::Config,
     enrollment_code::EnrollmentCode,
-    errors::RemoteUnlockError,
     net::{request::Request, response::Response},
+    prelude::*,
 };
 use std::{
     os::unix::net::UnixListener,
@@ -19,9 +18,7 @@ fn open_socket(sock_path: &str) -> std::io::Result<UnixListener> {
     UnixListener::bind(sock_path)
 }
 
-pub fn run_socket(
-    code_channel_sender: Sender<EnrollmentCode>,
-) -> Result<JoinHandle<()>, RemoteUnlockError> {
+pub fn run_socket(code_channel_sender: Sender<EnrollmentCode>) -> Result<JoinHandle<()>, Error> {
     let handle = thread::spawn(move || {
         let config = Config::new();
         let sock: UnixListener = open_socket(config.socket_path()).unwrap();
@@ -31,14 +28,38 @@ pub fn run_socket(
             let sock_req = Request::from_stream(&mut stream).unwrap();
             stream.shutdown(std::net::Shutdown::Read).unwrap();
 
-            if sock_req.path.unwrap().as_str() == "/begin_enroll"
-                && sock_req.method.unwrap().as_str() == "POST"
-            {
+            let path_array = sock_req.path.unwrap();
+            let path_str = match path_array.as_str() {
+                Ok(s) => s,
+                Err(_) => {
+                    stream.shutdown(std::net::Shutdown::Write).unwrap();
+                    continue;
+                }
+            };
+
+            let method_array = sock_req.method.unwrap();
+            let method_str = match method_array.as_str() {
+                Ok(s) => s,
+                Err(_) => {
+                    stream.shutdown(std::net::Shutdown::Write).unwrap();
+                    continue;
+                }
+            };
+
+            if path_str == "/begin_enroll" && method_str == "POST" {
                 let code: EnrollmentCode = EnrollmentCode::new();
 
                 let mut resp = Response::new();
                 serde_json::to_writer(&mut resp, &code).unwrap();
-                resp.add_header("Content-Type", "application/json");
+                match resp.add_header("Content-Type", "application/json") {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("Error adding header, {}", e);
+                        stream.shutdown(std::net::Shutdown::Write).unwrap();
+                        continue;
+                    }
+                };
+
                 resp.to_writer(&mut stream).unwrap();
                 code_channel_sender.send(code).unwrap();
             }

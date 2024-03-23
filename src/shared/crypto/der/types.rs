@@ -4,7 +4,7 @@ use der::{
 };
 use dryoc::types::Bytes;
 
-use crate::helper_types::ByteArray;
+use crate::types::ByteArray;
 #[derive(Debug, PartialEq, Eq)]
 pub struct NestedOctetString<T>
 where
@@ -40,18 +40,11 @@ impl<T: DecodeOwned + Encode> NestedOctetString<T> {
     }
 }
 
-impl<const N: usize> NestedOctetString<ByteArray<N, 4>> {
+impl<const N: usize> NestedOctetString<ByteArray<N>> {
     pub fn as_bytes(&self) -> &[u8] {
         self.inner.as_bytes()
     }
 }
-
-impl<const N: usize> NestedOctetString<ByteArray<N, 3>> {
-    pub fn as_bytes(&self) -> &[u8] {
-        self.inner.as_bytes()
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct AnyOwned<const N: usize = 64> {
     tag: der::Tag,
@@ -78,10 +71,15 @@ impl<const N: usize> Choice<'_> for AnyOwned<N> {
 
 impl<'a, const N: usize> DecodeValue<'a> for AnyOwned<N> {
     fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> der::Result<Self> {
-        let bytes = reader.read_slice(header.length)?;
+        let mut bytes = [0; N];
+        let length = u32::from(header.length) as usize;
+        let amt_read = reader.read_into(&mut bytes[..length])?.len();
+
+        let bytes = ByteArray::<N>::from((bytes, amt_read));
+
         Ok(Self {
             tag: header.tag,
-            bytes: ByteArray::new_from_slice(bytes),
+            bytes,
         })
     }
 }

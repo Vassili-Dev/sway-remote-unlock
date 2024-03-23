@@ -1,8 +1,7 @@
 use code_buffer::CodeBuffer;
-use remote_unlock_lib::config::Config;
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
-use remote_unlock_lib::errors::RemoteUnlockError;
 use remote_unlock_lib::net::request::Request;
+use remote_unlock_lib::prelude::*;
 use std::net::TcpListener;
 use std::sync::mpsc;
 
@@ -11,14 +10,15 @@ mod routes;
 mod socket;
 mod state;
 
-fn main() -> Result<(), RemoteUnlockError> {
+fn main() -> Result<(), Error> {
     let config = Config::new();
     // TODO: Convert to crossbeam MPMC bounded channel
     let (sock_sender, server_recv) = mpsc::channel::<EnrollmentCode>();
 
     let sock_handle = socket::run_socket(sock_sender)?;
 
-    let listener: TcpListener = TcpListener::bind("127.0.0.1:8142")?;
+    let listener: TcpListener =
+        TcpListener::bind((config.server_hostname(), config.server_port()))?;
     let mut code_buffer = code_buffer::CodeBuffer::new();
 
     for stream in listener.incoming() {
@@ -29,9 +29,10 @@ fn main() -> Result<(), RemoteUnlockError> {
 
         let req = Request::from_stream(&mut stream)?;
 
-        if req.path.unwrap().as_str() == "/enroll" && req.method.unwrap().as_str() == "POST" {
+        if req.path.unwrap().as_str()? == "/enroll" && req.method.unwrap().as_str()? == "POST" {
             routes::enroll::EnrollRoute::new(&config, &mut stream, &mut code_buffer).post(req)?;
-        } else if req.path.unwrap().as_str() == "/unlock" && req.method.unwrap().as_str() == "POST"
+        } else if req.path.unwrap().as_str()? == "/unlock"
+            && req.method.unwrap().as_str()? == "POST"
         {
             routes::unlock::UnlockRoute::new(&config, &mut stream).post(req)?;
         }
