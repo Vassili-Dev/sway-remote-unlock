@@ -13,4 +13,18 @@ pub trait Route<'a, 'c: 'a, T: Write> {
     fn run(&mut self, request: &Request) -> Result<Response, Error>;
 
     fn new(context: &'a mut ServerContext<'c, T>) -> Self;
+
+    fn match_route(request: &Request) -> Result<bool, Error> {
+        let path = request
+            .path
+            .as_ref()
+            .map(|path_buf| path_buf.as_str())
+            .unwrap_or(Ok(""))?;
+
+        if (path == Self::PATH) && (request.method == Some(Self::METHOD)) {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }

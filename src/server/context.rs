@@ -4,6 +4,7 @@ use std::sync::mpsc::Receiver;
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
 use remote_unlock_lib::prelude::*;
 
+use crate::logging;
 use crate::state::State;
 
 pub struct ServerContext<'a, T: Write> {
@@ -52,11 +53,13 @@ impl<'a, T: Write> ServerContext<'a, T> {
 
     pub fn create_storage_dirs(&mut self) -> Result<(), Error> {
         let storage_dir = self.config.storage_dir();
+        trace!("Creating storage directory: {}", storage_dir);
         std::fs::create_dir_all(storage_dir)?;
 
         Ok(())
     }
     pub fn init(&mut self) -> Result<(), Error> {
+        logging::Logger::init(self.config)?;
         self.create_storage_dirs()?;
         Ok(())
     }
@@ -73,7 +76,7 @@ impl<'a, T: Write> ServerContext<'a, T> {
             match code_buffer.insert(code) {
                 Ok(_) => {}
                 Err(_) => {
-                    println!("Code buffer full, ignoring code {:?}", code);
+                    warn!("Code buffer full, ignoring code {:?}", code);
                     break 'buffer_drain;
                 }
             }

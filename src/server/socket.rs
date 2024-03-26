@@ -54,7 +54,7 @@ pub fn run_socket(code_channel_sender: Sender<EnrollmentCode>) -> Result<JoinHan
                 match resp.add_header("Content-Type", "application/json") {
                     Ok(_) => {}
                     Err(e) => {
-                        println!("Error adding header, {}", e);
+                        error!("Error adding header, {}", e);
                         stream.shutdown(std::net::Shutdown::Write).unwrap();
                         continue;
                     }

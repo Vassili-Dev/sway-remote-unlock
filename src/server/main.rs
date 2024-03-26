@@ -8,6 +8,7 @@ use std::sync::mpsc;
 
 mod code_buffer;
 mod context;
+mod logging;
 mod router;
 mod routes;
 mod socket;
@@ -21,10 +22,6 @@ fn main() -> Result<(), Error> {
 
     let sock_handle = socket::run_socket(sock_sender)?;
 
-    let listener: TcpListener =
-        TcpListener::bind((config.server_hostname(), config.server_port()))?;
-    // let mut code_buffer = code_buffer::CodeBuffer::new();
-
     let mut context = context::ServerContext::builder()
         .config(&config)
         .code_receiver(server_recv)
@@ -33,13 +30,20 @@ fn main() -> Result<(), Error> {
 
     context.init()?;
 
+    debug!("Starting server");
+    let listener: TcpListener =
+        TcpListener::bind((config.server_hostname(), config.server_port()))?;
+    info!(
+        "Server started on {}:{}",
+        config.server_hostname(),
+        config.server_port()
+    );
+
     for stream in listener.incoming() {
         let stream = stream?;
         stream.set_nonblocking(true)?;
         context.replace_stream(stream);
-
         context.process_codes()?;
-        // process_codes(context.state().code_buffer(), context.code_receiver());
 
         let req = match Request::from_stream(context.stream()?) {
             Ok(req) => req,

@@ -1,7 +1,5 @@
 use std::net::TcpStream;
 
-use remote_unlock_lib::net::method::Method;
-
 use remote_unlock_lib::net::request::Request;
 use remote_unlock_lib::net::response::Response;
 use remote_unlock_lib::net::status::Status;
@@ -26,11 +24,11 @@ impl Router {
         context: &mut ServerContext<TcpStream>,
         request: &Request,
     ) -> Result<(), Error> {
-        let mut route = match (request.method(), request.path()) {
-            (Some(&EnrollRoute::<TcpStream>::METHOD), Some(EnrollRoute::<TcpStream>::PATH)) => {
+        let mut route = match request {
+            request if EnrollRoute::<TcpStream>::match_route(request)? => {
                 Routes::Enroll(EnrollRoute::new(context))
             }
-            (Some(Method::POST), Some(UnlockRoute::<TcpStream>::PATH)) => {
+            request if UnlockRoute::<TcpStream>::match_route(request)? => {
                 Routes::Unlock(UnlockRoute::new(context))
             }
             _ => Routes::NotFound(NotFound::new(context)),

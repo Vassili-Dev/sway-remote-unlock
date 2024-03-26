@@ -86,7 +86,7 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
                 }
             }
             Err(e) => {
-                println!("Error parsing enrollment request: {:?}", e);
+                error!("Error parsing enrollment request: {}", e);
                 Ok(builder.status(Status::BadRequest).build())
             }
         }

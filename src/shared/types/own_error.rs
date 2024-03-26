@@ -1,4 +1,5 @@
 use core::fmt;
+use log::error;
 use std::fmt::{Debug, Display};
 
 use crate::config::Config;
@@ -18,7 +19,7 @@ impl<K: ErrorKindMarker> OwnError<K> {
             Some(msg) => match ByteArrayString::try_from(msg) {
                 Ok(m) => Some(m),
                 Err(e) => {
-                    println!(
+                    error!(
                         "Warning: Failed to convert error message to ByteArrayString: {}",
                         e
                     );

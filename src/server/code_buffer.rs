@@ -26,15 +26,21 @@ impl CodeBuffer {
     }
 
     pub fn clear_expired(&mut self) {
+        let mut removed = 0;
         for code_opt in self.codes.iter_mut() {
             match code_opt {
                 Some(c) => {
                     if c.expired() {
                         *code_opt = None;
+                        removed += 1;
                     }
                 }
                 None => {}
             };
+        }
+
+        if removed > 0 {
+            debug!("Removed {} expired codes", removed);
         }
     }
 

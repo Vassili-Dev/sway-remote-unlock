@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 const DEFAULT_SOCKET_PATH: &str = "/tmp/remote_unlock.sock";
 const DEFAULT_STORAGE_DIR: &str = "./var/lib/remote_unlock";
 
@@ -8,6 +10,7 @@ const ENV_SOCKET_PATH: &str = "REMOTE_UNLOCK_SOCKET_PATH";
 const ENV_STORAGE_DIR: &str = "REMOTE_UNLOCK_STORAGE_DIR";
 const ENV_SERVER_HOSTNAME: &str = "REMOTE_UNLOCK_SERVER_HOSTNAME";
 const ENV_SERVER_PORT: &str = "REMOTE_UNLOCK_SERVER_PORT";
+const ENV_LOG_LEVEL: &str = "REMOTE_UNLOCK_LOG_LEVEL";
 
 #[cfg(debug_assertions)]
 const ENV_GENERATED_KEYS_DIR: &str = "REMOTE_UNLOCK_GENERATED_KEYS_DIR";
@@ -17,6 +20,7 @@ pub struct Config {
     storage_dir: Option<String>,
     server_hostname: Option<String>,
     server_port: Option<u16>,
+    log_level: Option<log::LevelFilter>,
     #[cfg(debug_assertions)]
     generated_keys_dir: Option<String>,
 }
@@ -36,6 +40,10 @@ impl Config {
             .ok()
             .map(|port| port.parse::<u16>().unwrap());
 
+        let log_level = std::env::var(ENV_LOG_LEVEL).ok().map(|level| {
+            log::LevelFilter::from_str(level.as_str()).unwrap_or(log::LevelFilter::Info)
+        });
+
         #[cfg(debug_assertions)]
         let generated_keys_dir = std::env::var(ENV_GENERATED_KEYS_DIR).ok();
 
@@ -44,6 +52,7 @@ impl Config {
             storage_dir,
             server_hostname,
             server_port,
+            log_level,
             #[cfg(debug_assertions)]
             generated_keys_dir,
         }
@@ -82,6 +91,13 @@ impl Config {
         match &self.server_port {
             Some(port) => *port,
             None => 8142,
+        }
+    }
+
+    pub fn log_level(&self) -> log::LevelFilter {
+        match &self.log_level {
+            Some(level) => *level,
+            None => log::LevelFilter::Info,
         }
     }
 }

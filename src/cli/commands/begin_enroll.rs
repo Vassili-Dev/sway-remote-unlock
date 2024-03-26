@@ -26,10 +26,11 @@ pub fn begin_enroll(config: &Config) -> Result<(), Error> {
     let code = match serde_json::from_slice::<EnrollmentCode>(&response.body[..response.body_len]) {
         Ok(c) => c,
         Err(e) => {
-            println!("Response: {:?}", response);
-            println!("Headers: {:?}", response.headers);
-            println!("Body: {:?}", std::str::from_utf8(&response.body)?);
-            panic!("Error parsing response: {}", e);
+            error!("Error parsing response: {}", e);
+            debug!("Response: {:?}", response);
+            debug!("Headers: {:?}", response.headers);
+            debug!("Body: {:?}", std::str::from_utf8(&response.body)?);
+            return Err(e.into());
         }
     };
 

@@ -11,4 +11,5 @@ pub mod unlock_request;
 pub mod prelude {
     pub use crate::config::Config;
     pub use crate::types::*;
+    pub use log::{debug, error, info, trace, warn};
 }
