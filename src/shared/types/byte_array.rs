@@ -258,7 +258,6 @@ impl<const N: usize> EncodePublicKey for ByteArray<N> {
     }
 }
 
-#[derive(Debug)]
 pub struct ByteArrayString<const N: usize = 64>(ByteArray<N>);
 impl<const N: usize> From<ByteArray<N>> for ByteArrayString<N> {
     fn from(ba: ByteArray<N>) -> Self {
@@ -329,6 +328,18 @@ impl<const N: usize> Display for ByteArrayString<N> {
     }
 }
 
+impl<const N: usize> ByteArrayString<N> {
+    pub fn as_str(&self) -> Result<&str, error::Error> {
+        self.0.as_str()
+    }
+}
+
+impl<const N: usize> Debug for ByteArrayString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0.as_str().unwrap_or("Malformed String"))
+    }
+}
+
 impl TryFrom<i8> for ByteArrayString<5> {
     type Error = error::Error;
     fn try_from(n: i8) -> Result<Self, error::Error> {
@@ -388,6 +399,7 @@ impl TryFrom<i32> for ByteArrayString<11> {
         }))
     }
 }
+
 mod error {
     use crate::types::OwnError;
     use std::fmt::Display;

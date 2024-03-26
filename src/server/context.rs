@@ -23,8 +23,8 @@ impl<'a, T: Write> ServerContext<'a, T> {
         }
     }
 
-    pub fn state(&self) -> &State {
-        &self.state
+    pub fn state(&mut self) -> &mut State {
+        &mut self.state
     }
 
     pub fn code_receiver(&self) -> &Receiver<EnrollmentCode> {
@@ -35,8 +35,10 @@ impl<'a, T: Write> ServerContext<'a, T> {
         &self.config
     }
 
-    pub fn stream(&mut self) -> Option<&mut T> {
-        self.stream.as_mut()
+    pub fn stream(&mut self) -> Result<&mut T, Error> {
+        self.stream
+            .as_mut()
+            .ok_or(Error::new(ErrorKind::Server, Some("Unset stream")))
     }
 
     pub fn replace_stream(&mut self, stream: T) {
@@ -71,6 +73,7 @@ impl<'a, T: Write> ServerContextBuilder<'a, T> {
         self
     }
 
+    #[allow(dead_code)]
     pub fn stream(mut self, stream: T) -> Self {
         self.stream = Some(stream);
         self

@@ -12,6 +12,7 @@ pub enum Error {
     P256KeyError(p256::elliptic_curve::Error),
     P256SignatureParseError(p256::ecdsa::Error),
     SignatureDecodeError(base64::DecodeSliceError),
+    UuidError(uuid::Error),
     ByteArrayError(ByteArrayError),
     OwnError(OwnError<ErrorKind>),
     Utf8Error(std::str::Utf8Error),
@@ -93,6 +94,9 @@ impl std::fmt::Display for Error {
             Self::Utf8Error(e) => {
                 write!(f, "Utf8Error: {}", e)
             }
+            Self::UuidError(e) => {
+                write!(f, "UuidError: {}", e)
+            }
             Self::OwnError(e) => write!(f, "{}", e),
         }
     }
@@ -169,5 +173,11 @@ impl From<serde_json::Error> for Error {
 impl From<ByteArrayError> for Error {
     fn from(err: ByteArrayError) -> Self {
         Self::ByteArrayError(err)
+    }
+}
+
+impl From<uuid::Error> for Error {
+    fn from(err: uuid::Error) -> Self {
+        Self::UuidError(err)
     }
 }

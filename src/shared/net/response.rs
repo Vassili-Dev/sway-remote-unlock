@@ -46,6 +46,10 @@ impl Response {
         }
     }
 
+    pub fn builder() -> ResponseBuilder {
+        ResponseBuilder::new()
+    }
+
     pub fn add_header(&mut self, name: &'static str, value: &'static str) -> Result<(), Error> {
         for header in self.headers.iter_mut() {
             match header {
@@ -180,5 +184,77 @@ impl Response {
 impl Default for Response {
     fn default() -> Self {
         Self::new(Status::Ok)
+    }
+}
+
+pub struct ResponseBuilder {
+    status: Option<Status>,
+    headers: [Option<Header>; 16],
+    body: [u8; 1024 * 2],
+    body_len: usize,
+    body_written: usize,
+    num_headers: usize,
+}
+
+impl ResponseBuilder {
+    fn new() -> Self {
+        Self {
+            status: None,
+            headers: [None; 16],
+            body: [0; 1024 * 2],
+            body_len: 0,
+            body_written: 0,
+            num_headers: 0,
+        }
+    }
+
+    pub fn status(mut self, status: Status) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    pub fn add_header(mut self, name: &'static str, value: &'static str) -> Result<Self, Error> {
+        for header in self.headers.iter_mut() {
+            match header {
+                Some(header) => {
+                    if header.name.as_str()? == name {
+                        header.value.copy_from_slice(value.as_bytes())?;
+                        return Ok(self);
+                    }
+                }
+                None => {
+                    let mut new_header = Header::new();
+                    new_header.name.copy_from_slice(name.as_bytes())?;
+                    new_header.value.copy_from_slice(value.as_bytes())?;
+                    *header = Some(new_header);
+                    self.num_headers += 1;
+                    return Ok(self);
+                }
+            };
+        }
+
+        Err(Error::new(ErrorKind::Server, Some("Too many headers")))
+    }
+
+    pub fn body(mut self, body: &[u8]) -> Self {
+        let remaining = self.body.len() - self.body_written;
+        let write_amt = std::cmp::min(remaining, body.len());
+
+        self.body[self.body_written..self.body_written + write_amt]
+            .copy_from_slice(&body[..write_amt]);
+        self.body_written += write_amt;
+
+        self
+    }
+
+    pub fn build(self) -> Response {
+        Response {
+            status: self.status.unwrap_or(Status::Ok),
+            headers: self.headers,
+            body: self.body,
+            body_len: self.body_len,
+            body_written: self.body_written,
+            num_headers: self.num_headers,
+        }
     }
 }

@@ -1,31 +1,37 @@
 use std::io::Write;
+use std::net::TcpStream;
 use std::path::Path;
 
 use remote_unlock_lib::crypto::key::PublicKey;
+use remote_unlock_lib::net::method::Method;
 use remote_unlock_lib::net::status::Status;
 use remote_unlock_lib::{
     net::{request::Request, response::Response},
     prelude::*,
-    unlock_request::UnlockRequest,
+    unlock_request::UnlockRequestBody,
 };
 
 use base64::prelude::*;
 
-pub struct UnlockRoute<'a> {
-    config: &'a Config,
-    stream: &'a mut std::net::TcpStream,
+use crate::context::ServerContext;
+
+use super::route::Route;
+
+pub struct UnlockRoute<'a, 'c: 'a, T: Write = TcpStream> {
+    context: &'a mut ServerContext<'c, T>,
 }
 
-impl<'a> UnlockRoute<'a> {
+impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
     const PATH: &'static str = "/unlock";
+    const METHOD: Method = Method::POST;
 
-    pub fn new(config: &'a Config, stream: &'a mut std::net::TcpStream) -> UnlockRoute<'a> {
-        UnlockRoute { config, stream }
+    fn new(context: &'a mut ServerContext<'c, T>) -> Self {
+        Self { context }
     }
-    pub fn post(&mut self, req: Request) -> Result<(), Error> {
+    fn run(&mut self, req: &Request) -> Result<(), Error> {
         // Parse the body of the request
         let body_str = std::str::from_utf8(&req.body[..req.body_len]).unwrap();
-        let unlock_req = serde_json::from_str::<UnlockRequest>(body_str);
+        let unlock_req = serde_json::from_str::<UnlockRequestBody>(body_str);
         let mut resp = Response::new(Status::Ok);
 
         match unlock_req {
@@ -38,22 +44,21 @@ impl<'a> UnlockRoute<'a> {
                 });
 
                 if signature_header.is_none() {
-                    println!("{:?}", req.headers);
                     resp.status = Status::BadRequest;
-                    resp.to_writer(self.stream).unwrap();
-                    self.stream.flush().unwrap();
+                    resp.to_writer(self.context.stream()?)?;
+                    self.context.stream()?.flush()?;
                     return Ok(());
                 }
 
                 let signature_header = signature_header.unwrap().as_ref().unwrap();
 
-                let pubkey_path = Path::new(self.config.storage_dir())
+                let pubkey_path = Path::new(self.context.config().storage_dir())
                     .join(std::str::from_utf8(unlock_req.id()).unwrap());
 
                 if !pubkey_path.exists() {
                     resp.status = Status::NotFound;
-                    resp.to_writer(self.stream).unwrap();
-                    self.stream.flush().unwrap();
+                    resp.to_writer(self.context.stream()?)?;
+                    self.context.stream()?.flush()?;
                     return Ok(());
                 }
 
@@ -62,8 +67,8 @@ impl<'a> UnlockRoute<'a> {
                     Ok(pubkey) => pubkey,
                     Err(_) => {
                         resp.status = Status::InternalServerError;
-                        resp.to_writer(self.stream).unwrap();
-                        self.stream.flush().unwrap();
+                        resp.to_writer(self.context.stream()?)?;
+                        self.context.stream()?.flush()?;
                         return Ok(());
                     }
                 };
@@ -72,24 +77,31 @@ impl<'a> UnlockRoute<'a> {
                 let signature_length = BASE64_STANDARD
                     .decode_slice(signature_header.value.as_bytes(), &mut signature_bytes)?;
 
-                let valid_request =
+                let signature_valid =
                     unlock_req.verify(&signature_bytes[..signature_length], &pubkey)?;
+
+                let id = uuid::Uuid::try_parse_ascii(unlock_req.id())?;
+                let valid_request = signature_valid
+                    && self
+                        .context
+                        .state()
+                        .validate_and_update_nonce(&id, unlock_req.nonce());
 
                 if valid_request {
                     resp.status = remote_unlock_lib::net::status::Status::Ok;
-                    resp.to_writer(self.stream).unwrap();
-                    self.stream.flush().unwrap();
+                    resp.to_writer(self.context.stream()?)?;
+                    self.context.stream()?.flush()?;
                 } else {
                     resp.status = remote_unlock_lib::net::status::Status::Forbidden;
-                    resp.to_writer(self.stream).unwrap();
-                    self.stream.flush().unwrap();
+                    resp.to_writer(self.context.stream()?)?;
+                    self.context.stream()?.flush()?;
                 }
             }
             Err(e) => {
                 resp.status = remote_unlock_lib::net::status::Status::BadRequest;
-                resp.to_writer(self.stream).unwrap();
+                resp.to_writer(self.context.stream()?)?;
                 println!("Error parsing enrollment request: {:?}", e);
-                self.stream.flush().unwrap();
+                self.context.stream()?.flush()?;
             }
         }
 

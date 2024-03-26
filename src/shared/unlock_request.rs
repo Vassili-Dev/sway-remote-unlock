@@ -7,12 +7,12 @@ use spki::DecodePublicKey;
 const SERIAL_LEN: usize = 1024;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
-pub struct UnlockRequest<'a> {
+pub struct UnlockRequestBody<'a> {
     id: &'a str,
     nonce: u128,
 }
 
-impl<'a> UnlockRequest<'a> {
+impl<'a> UnlockRequestBody<'a> {
     pub fn verify(
         &self,
         signature: &[u8],
@@ -36,6 +36,10 @@ impl<'a> UnlockRequest<'a> {
     pub fn id(&self) -> &[u8] {
         self.id.as_bytes()
     }
+
+    pub fn nonce(&self) -> u128 {
+        self.nonce
+    }
 }
 
 #[cfg(test)]
@@ -52,7 +56,7 @@ mod tests {
     fn test_verify() {
         let signing_key = SigningKey::random(&mut OsRng);
         let verifying_key = signing_key.verifying_key();
-        let unlock_request = UnlockRequest {
+        let unlock_request = UnlockRequestBody {
             id: "test",
             nonce: 0,
         };

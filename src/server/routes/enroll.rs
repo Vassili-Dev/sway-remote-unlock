@@ -1,37 +1,33 @@
-use std::io::Write;
+use std::{io::Write, net::TcpStream};
 
 use remote_unlock_lib::{
-    enroll_request::EnrollmentRequest, enroll_response, net::request::Request,
-    net::response::Response, prelude::*,
+    enroll_request::EnrollmentRequest,
+    enroll_response,
+    net::{request::Request, response::Response, status::Status},
+    prelude::*,
 };
 
-use crate::{code_buffer::CodeBuffer, context};
+use crate::context::ServerContext;
 
 use super::route::Route;
 
-pub struct EnrollRoute<'a, T: Write> {
-    config: &'a Config,
-    stream: &'a mut T,
-    code_buffer: &'a mut CodeBuffer,
+pub struct EnrollRoute<'a, 'c: 'a, T: Write = TcpStream> {
+    context: &'a mut ServerContext<'c, T>,
 }
 
-impl<'a, T: Write> Route for EnrollRoute<'a, T> {
+impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for EnrollRoute<'a, 'c, T> {
     const PATH: &'static str = "/enroll";
     const METHOD: remote_unlock_lib::net::method::Method =
         remote_unlock_lib::net::method::Method::POST;
 
-    fn new<_>(context: &mut context::ServerContext<T>) -> EnrollRoute<'a, T> {
-        EnrollRoute {
-            config,
-            stream,
-            code_buffer,
-        }
+    fn new(context: &'a mut ServerContext<'c, T>) -> EnrollRoute<'a, 'c, T> {
+        Self { context }
     }
-    fn run(&mut self, req: Request) -> Result<(), Error> {
+    fn run(&mut self, req: &Request) -> Result<(), Error> {
         // Parse the body of the request
         let body_str = std::str::from_utf8(&req.body[..req.body_len]).unwrap();
         let enroll_req = serde_json::from_str::<EnrollmentRequest>(body_str);
-        let mut builder = Response::builder();
+        let builder = Response::builder();
 
         match enroll_req {
             Ok(enroll_req) => {
@@ -43,26 +39,28 @@ impl<'a, T: Write> Route for EnrollRoute<'a, T> {
 
                 let pem = enroll_req.pubkey_pem();
                 let pubkey = remote_unlock_lib::crypto::key::PublicKey::from_pem(pem.as_bytes())?;
-                let path = std::path::Path::new(self.config.storage_dir()).join(id);
+                let path = std::path::Path::new(self.context.config().storage_dir()).join(id);
                 pubkey.save_to_pem_file(path.as_path())?;
 
-                if self.code_buffer.verify(code) {
-                    resp.status = remote_unlock_lib::net::status::Status::Ok;
-                    resp.add_header("Content-Type", "application/json")?;
+                if self.context.state().code_buffer().verify(code) {
+                    let mut resp = builder
+                        .status(Status::Ok)
+                        .add_header("Content-Type", "application/json")?
+                        .build();
                     serde_json::to_writer(&mut resp, &enroll_response).unwrap();
-                    resp.to_writer(self.stream).unwrap();
-                    self.stream.flush().unwrap();
+                    resp.to_writer(self.context.stream()?)?;
+                    self.context.stream()?.flush()?;
                 } else {
-                    resp.status = remote_unlock_lib::net::status::Status::Forbidden;
-                    resp.to_writer(self.stream).unwrap();
-                    self.stream.flush().unwrap();
+                    let resp = builder.status(Status::Forbidden).build();
+                    resp.to_writer(self.context.stream()?)?;
+                    self.context.stream()?.flush()?;
                 }
             }
             Err(e) => {
-                resp.status = remote_unlock_lib::net::status::Status::BadRequest;
-                resp.to_writer(self.stream).unwrap();
+                let resp = builder.status(Status::BadRequest).build();
+                resp.to_writer(self.context.stream()?)?;
                 println!("Error parsing enrollment request: {:?}", e);
-                self.stream.flush().unwrap();
+                self.context.stream()?.flush()?;
             }
         }
 
@@ -72,6 +70,10 @@ impl<'a, T: Write> Route for EnrollRoute<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc;
+
+    use crate::{context, state::State};
+
     use super::*;
     use remote_unlock_lib::enrollment_code::EnrollmentCode;
     const PUBKEY_PEM: &'static str = include_str!("../../../test_data/pem_test.pub");
@@ -79,13 +81,24 @@ mod tests {
     #[test]
     fn test_post() {
         let config = Config::new();
-        let mut mock_server = ByteArray::<{ Config::MAX_PACKET_SIZE * 2 }>::new();
-        let mut code_buffer = CodeBuffer::new();
+        let mock_server = ByteArray::<{ Config::MAX_PACKET_SIZE * 2 }>::new();
+        let mut context: ServerContext<ByteArray<{ Config::MAX_PACKET_SIZE * 2 }>> =
+            context::ServerContext::builder()
+                .config(&config)
+                .code_receiver(mpsc::channel::<EnrollmentCode>().1)
+                .state(State::new())
+                .stream(mock_server)
+                .build()
+                .unwrap();
         let enrollment_code = EnrollmentCode::new();
 
         let code_num = enrollment_code.code();
-        code_buffer.insert(enrollment_code).unwrap();
-        let mut enroll_route = EnrollRoute::new(&config, &mut mock_server, &mut code_buffer);
+        context
+            .state()
+            .code_buffer()
+            .insert(enrollment_code)
+            .unwrap();
+        let mut enroll_route = EnrollRoute::new(&mut context);
 
         let pubkey = ByteArray::try_from(PUBKEY_PEM.as_bytes()).unwrap();
 
@@ -95,9 +108,9 @@ mod tests {
         serde_json::to_writer(&mut req, &enroll_req).unwrap();
         req.flush().unwrap();
 
-        enroll_route.post(req).unwrap();
+        enroll_route.run(&req).unwrap();
 
-        let resp = Response::from_stream(&mut mock_server).unwrap();
+        let resp = Response::from_stream(&mut context.stream().unwrap()).unwrap();
 
         assert!(resp.status == remote_unlock_lib::net::status::Status::Ok);
     }

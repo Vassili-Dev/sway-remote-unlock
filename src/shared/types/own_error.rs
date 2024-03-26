@@ -1,3 +1,4 @@
+use core::fmt;
 use std::fmt::{Debug, Display};
 
 use crate::config::Config;
@@ -6,7 +7,6 @@ use super::ByteArrayString;
 
 pub trait ErrorKindMarker: Display + Debug + Sized {}
 
-#[derive(Debug)]
 pub struct OwnError<K: ErrorKindMarker> {
     pub kind: K,
     pub message: Option<ByteArrayString<{ Config::ERROR_STRING_SIZE }>>,
@@ -40,6 +40,15 @@ impl<K: ErrorKindMarker> From<K> for OwnError<K> {
 
 impl<K: ErrorKindMarker> Display for OwnError<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.message {
+            Some(msg) => write!(f, "{}: {}", self.kind, msg),
+            None => write!(f, "{}", self.kind),
+        }
+    }
+}
+
+impl<K: ErrorKindMarker> Debug for OwnError<K> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.message {
             Some(msg) => write!(f, "{}: {}", self.kind, msg),
             None => write!(f, "{}", self.kind),

@@ -1,6 +1,6 @@
 use remote_unlock_lib::{
     enrollment_code::EnrollmentCode,
-    net::{request::Request, response::Response},
+    net::{request::Request, response::Response, status::Status},
     prelude::*,
 };
 use std::{
@@ -37,10 +37,10 @@ pub fn run_socket(code_channel_sender: Sender<EnrollmentCode>) -> Result<JoinHan
                 }
             };
 
-            let method_array = sock_req.method.unwrap();
-            let method_str = match method_array.as_str() {
-                Ok(s) => s,
-                Err(_) => {
+            let method_array = sock_req.method;
+            let method_str = match method_array {
+                Some(s) => s.as_str(),
+                None => {
                     stream.shutdown(std::net::Shutdown::Write).unwrap();
                     continue;
                 }
@@ -49,7 +49,7 @@ pub fn run_socket(code_channel_sender: Sender<EnrollmentCode>) -> Result<JoinHan
             if path_str == "/begin_enroll" && method_str == "POST" {
                 let code: EnrollmentCode = EnrollmentCode::new();
 
-                let mut resp = Response::new();
+                let mut resp = Response::new(Status::Ok);
                 serde_json::to_writer(&mut resp, &code).unwrap();
                 match resp.add_header("Content-Type", "application/json") {
                     Ok(_) => {}

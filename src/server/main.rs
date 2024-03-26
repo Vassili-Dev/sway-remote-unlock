@@ -5,7 +5,7 @@ use remote_unlock_lib::net::response::Response;
 use remote_unlock_lib::net::status::Status;
 use remote_unlock_lib::prelude::*;
 use std::net::TcpListener;
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc;
 
 mod code_buffer;
 mod context;
@@ -32,33 +32,26 @@ fn main() -> Result<(), Error> {
         .build()?;
 
     for stream in listener.incoming() {
-        let mut stream = stream?;
+        let stream = stream?;
         stream.set_nonblocking(true)?;
         context.replace_stream(stream);
 
-        process_codes(&mut code_buffer, &server_recv);
+        process_codes(&mut code_buffer, context.code_receiver());
 
-        let req = match Request::from_stream(context.stream().ok_or(Error::new(
-            ErrorKind::Server,
-            Some("No stream for parsing request"),
-        ))?) {
+        let req = match Request::from_stream(context.stream()?) {
             Ok(req) => req,
             Err(_e) => {
                 let error_resp = Response::new(Status::BadRequest);
-                error_resp.to_writer(&mut stream);
+                error_resp.to_writer(context.stream()?)?;
 
                 context.remove_stream();
                 continue;
             }
         };
 
-        if req.path.unwrap().as_str()? == "/enroll" && req.method.unwrap().as_str()? == "POST" {
-            routes::enroll::EnrollRoute::new(&config, &mut stream, &mut code_buffer).post(req)?;
-        } else if req.path.unwrap().as_str()? == "/unlock"
-            && req.method.unwrap().as_str()? == "POST"
-        {
-            routes::unlock::UnlockRoute::new(&config, &mut stream).post(req)?;
-        }
+        let router = router::Router::new();
+
+        router.route(&mut context, &req)?;
 
         context.remove_stream();
     }
