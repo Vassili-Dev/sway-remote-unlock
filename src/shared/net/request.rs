@@ -34,9 +34,9 @@ impl Write for Request {
     }
 }
 
-impl Request {
-    pub fn new() -> Request {
-        Request {
+impl<const HV: usize> Request<HV> {
+    pub fn new() -> Self {
+        Self {
             path: None,
             method: None,
             headers: [None; 16],
@@ -47,8 +47,8 @@ impl Request {
         }
     }
 
-    pub fn builder() -> RequestBuilder {
-        RequestBuilder::default()
+    pub fn builder() -> RequestBuilder<HV> {
+        RequestBuilder::<HV>::default()
     }
 
     pub fn add_header(&mut self, name: &str, value: &str) -> Result<(), Error> {
@@ -71,6 +71,20 @@ impl Request {
             };
         }
         Err(Error::new(ErrorKind::Server, Some("Too many headers")))
+    }
+
+    pub fn get_header(&self, name: &str) -> Option<&Header<32, HV>> {
+        for header in self.headers.iter() {
+            match header {
+                Some(header) => {
+                    if header.name.as_str().unwrap_or("") == name {
+                        return Some(header);
+                    }
+                }
+                None => break,
+            }
+        }
+        None
     }
 
     pub fn to_writer(&self, writer: &mut impl Write) -> Result<(), Error> {
@@ -104,8 +118,8 @@ impl Request {
         Ok(())
     }
 
-    pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Request, Error> {
-        let mut builder = Request::builder();
+    pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Self, Error> {
+        let mut builder = Self::builder();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
 

@@ -12,7 +12,7 @@ use crate::context::ServerContext;
 use super::route::Route;
 
 pub struct NotFound<'a, 'c: 'a, T: Write = TcpStream> {
-    context: &'a mut ServerContext<'c, T>,
+    _context: &'a mut ServerContext<'c, T>,
 }
 
 impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for NotFound<'a, 'c, T> {
@@ -20,15 +20,14 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for NotFound<'a, 'c, T> {
     const METHOD: Method = Method::GET;
 
     fn new(context: &'a mut ServerContext<'c, T>) -> Self {
-        Self { context }
+        Self { _context: context }
     }
 
-    fn run(&mut self, _req: &Request) -> Result<(), Error> {
+    fn run(&mut self, _req: &Request) -> Result<Response, Error> {
         let mut response = Response::new(Status::NotFound);
         response.add_header("Content-Type", "text/plain")?;
         response.write("Not found".as_bytes())?;
 
-        response.to_writer(self.context.stream()?)?;
-        Ok(())
+        Ok(response)
     }
 }

@@ -28,48 +28,40 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
     fn new(context: &'a mut ServerContext<'c, T>) -> Self {
         Self { context }
     }
-    fn run(&mut self, req: &Request) -> Result<(), Error> {
+    fn run(&mut self, req: &Request) -> Result<Response, Error> {
         // Parse the body of the request
-        let body_str = std::str::from_utf8(&req.body[..req.body_len]).unwrap();
+        let body_str = std::str::from_utf8(&req.body[..req.body_len])?;
         let unlock_req = serde_json::from_str::<UnlockRequestBody>(body_str);
-        let mut resp = Response::new(Status::Ok);
+        let builder = Response::builder();
 
         match unlock_req {
             Ok(unlock_req) => {
                 // Get the signature header
-                let signature_header = req.headers.iter().find(|h| {
-                    h.is_some()
-                        && h.as_ref().unwrap().name.as_str().unwrap_or("")
-                            == "X-RemoteUnlock-Signature"
-                });
+                let signature_header = req.get_header("X-RemoteUnlock-Signature");
 
-                if signature_header.is_none() {
-                    resp.status = Status::BadRequest;
-                    resp.to_writer(self.context.stream()?)?;
-                    self.context.stream()?.flush()?;
-                    return Ok(());
-                }
+                let signature_header = match signature_header {
+                    Some(s) => s,
+                    None => {
+                        let resp = builder.status(Status::BadRequest).build();
+                        return Ok(resp);
+                    }
+                };
 
-                let signature_header = signature_header.unwrap().as_ref().unwrap();
+                let mut pubkey_path = Path::new(self.context.config().storage_dir())
+                    .join(std::str::from_utf8(unlock_req.id())?);
 
-                let pubkey_path = Path::new(self.context.config().storage_dir())
-                    .join(std::str::from_utf8(unlock_req.id()).unwrap());
+                pubkey_path.set_extension("pub");
 
                 if !pubkey_path.exists() {
-                    resp.status = Status::NotFound;
-                    resp.to_writer(self.context.stream()?)?;
-                    self.context.stream()?.flush()?;
-                    return Ok(());
+                    let resp = builder.status(Status::NotFound).build();
+                    return Ok(resp);
                 }
 
                 // Try to retrieve the public key from storage
                 let pubkey = match PublicKey::read_pem_file(pubkey_path.as_path()) {
                     Ok(pubkey) => pubkey,
                     Err(_) => {
-                        resp.status = Status::InternalServerError;
-                        resp.to_writer(self.context.stream()?)?;
-                        self.context.stream()?.flush()?;
-                        return Ok(());
+                        return Ok(builder.status(Status::InternalServerError).build());
                     }
                 };
 
@@ -88,23 +80,15 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
                         .validate_and_update_nonce(&id, unlock_req.nonce());
 
                 if valid_request {
-                    resp.status = remote_unlock_lib::net::status::Status::Ok;
-                    resp.to_writer(self.context.stream()?)?;
-                    self.context.stream()?.flush()?;
+                    Ok(builder.status(Status::Ok).build())
                 } else {
-                    resp.status = remote_unlock_lib::net::status::Status::Forbidden;
-                    resp.to_writer(self.context.stream()?)?;
-                    self.context.stream()?.flush()?;
+                    Ok(builder.status(Status::Forbidden).build())
                 }
             }
             Err(e) => {
-                resp.status = remote_unlock_lib::net::status::Status::BadRequest;
-                resp.to_writer(self.context.stream()?)?;
                 println!("Error parsing enrollment request: {:?}", e);
-                self.context.stream()?.flush()?;
+                Ok(builder.status(Status::BadRequest).build())
             }
         }
-
-        Ok(())
     }
 }

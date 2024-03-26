@@ -8,15 +8,15 @@ use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 
 pub fn begin_enroll(config: &Config) -> Result<(), Error> {
-    let mut stream = UnixStream::connect(config.socket_path()).unwrap();
-    let req = Request::builder()
+    let mut stream = UnixStream::connect(config.socket_path())?;
+    let req = Request::<{ 64 * 2 }>::builder()
         .method(Method::POST)
         .path("/begin_enroll")
         .build();
 
-    req.to_writer(&mut stream).unwrap();
-    stream.shutdown(Shutdown::Write).unwrap();
-    let response = Response::from_stream(&mut stream).unwrap();
+    req.to_writer(&mut stream)?;
+    stream.shutdown(Shutdown::Write)?;
+    let response = Response::from_stream(&mut stream)?;
 
     if response.status != Status::Ok {
         let err = Error::new(ErrorKind::Server, Some(response.status.to_string()));
@@ -28,7 +28,7 @@ pub fn begin_enroll(config: &Config) -> Result<(), Error> {
         Err(e) => {
             println!("Response: {:?}", response);
             println!("Headers: {:?}", response.headers);
-            println!("Body: {:?}", std::str::from_utf8(&response.body).unwrap());
+            println!("Body: {:?}", std::str::from_utf8(&response.body)?);
             panic!("Error parsing response: {}", e);
         }
     };

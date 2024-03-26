@@ -25,7 +25,7 @@ pub fn run_socket(code_channel_sender: Sender<EnrollmentCode>) -> Result<JoinHan
 
         for stream in sock.incoming() {
             let mut stream = stream.unwrap();
-            let sock_req = Request::from_stream(&mut stream).unwrap();
+            let sock_req = Request::<{ 64 * 2 }>::from_stream(&mut stream).unwrap();
             stream.shutdown(std::net::Shutdown::Read).unwrap();
 
             let path_array = sock_req.path.unwrap();

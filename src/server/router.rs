@@ -3,6 +3,8 @@ use std::net::TcpStream;
 use remote_unlock_lib::net::method::Method;
 
 use remote_unlock_lib::net::request::Request;
+use remote_unlock_lib::net::response::Response;
+use remote_unlock_lib::net::status::Status;
 use remote_unlock_lib::prelude::*;
 
 use crate::context::ServerContext;
@@ -25,7 +27,7 @@ impl Router {
         request: &Request,
     ) -> Result<(), Error> {
         let mut route = match (request.method(), request.path()) {
-            (Some(Method::GET), Some(EnrollRoute::<TcpStream>::PATH)) => {
+            (Some(&EnrollRoute::<TcpStream>::METHOD), Some(EnrollRoute::<TcpStream>::PATH)) => {
                 Routes::Enroll(EnrollRoute::new(context))
             }
             (Some(Method::POST), Some(UnlockRoute::<TcpStream>::PATH)) => {
@@ -34,28 +36,11 @@ impl Router {
             _ => Routes::NotFound(NotFound::new(context)),
         };
 
-        route.run(request)?;
+        let resp = route
+            .run(request)
+            .unwrap_or(Response::new(Status::InternalServerError));
 
-        // match request.path.as_ref() {
-        //     Some(path) => match path.as_str()? {
-        //         "/hello" => {
-        //             response.status = Status::OK;
-        //             response.add_header("Content-Type", "text/plain")?;
-        //             write!(response, "Hello, world!")?;
-        //         }
-        //         _ => {
-        //             response.status = Status::NotFound;
-        //             response.add_header("Content-Type", "text/plain")?;
-        //             write!(response, "Not found")?;
-        //         }
-        //     },
-        //     None => {
-        //         response.status = Status::BadRequest;
-        //         response.add_header("Content-Type", "text/plain")?;
-        //         write!(response, "Bad request")?;
-        //     }
-        // }
-
+        resp.to_writer(context.stream()?)?;
         Ok(())
     }
 }

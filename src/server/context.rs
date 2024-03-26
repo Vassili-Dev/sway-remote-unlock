@@ -27,6 +27,7 @@ impl<'a, T: Write> ServerContext<'a, T> {
         &mut self.state
     }
 
+    #[allow(dead_code)]
     pub fn code_receiver(&self) -> &Receiver<EnrollmentCode> {
         &self.code_receiver
     }
@@ -47,6 +48,38 @@ impl<'a, T: Write> ServerContext<'a, T> {
 
     pub fn remove_stream(&mut self) {
         self.stream = None;
+    }
+
+    pub fn create_storage_dirs(&mut self) -> Result<(), Error> {
+        let storage_dir = self.config.storage_dir();
+        std::fs::create_dir_all(storage_dir)?;
+
+        Ok(())
+    }
+    pub fn init(&mut self) -> Result<(), Error> {
+        self.create_storage_dirs()?;
+        Ok(())
+    }
+
+    pub fn process_codes(&mut self) -> Result<(), Error> {
+        let code_buffer = self.state.code_buffer();
+        let code_receiver = &self.code_receiver;
+
+        // Clear expired codes from the buffer and shift the rest down
+        code_buffer.clear_expired();
+
+        // Drain the code channel into the buffer
+        'buffer_drain: while let Ok(code) = code_receiver.try_recv() {
+            match code_buffer.insert(code) {
+                Ok(_) => {}
+                Err(_) => {
+                    println!("Code buffer full, ignoring code {:?}", code);
+                    break 'buffer_drain;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
