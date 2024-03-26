@@ -5,7 +5,9 @@ use remote_unlock_lib::{
     net::response::Response, prelude::*,
 };
 
-use crate::code_buffer::CodeBuffer;
+use crate::{code_buffer::CodeBuffer, context};
+
+use super::route::Route;
 
 pub struct EnrollRoute<'a, T: Write> {
     config: &'a Config,
@@ -13,23 +15,23 @@ pub struct EnrollRoute<'a, T: Write> {
     code_buffer: &'a mut CodeBuffer,
 }
 
-impl<'a, T: Write> EnrollRoute<'a, T> {
-    pub fn new(
-        config: &'a Config,
-        stream: &'a mut T,
-        code_buffer: &'a mut CodeBuffer,
-    ) -> EnrollRoute<'a, T> {
+impl<'a, T: Write> Route for EnrollRoute<'a, T> {
+    const PATH: &'static str = "/enroll";
+    const METHOD: remote_unlock_lib::net::method::Method =
+        remote_unlock_lib::net::method::Method::POST;
+
+    fn new<_>(context: &mut context::ServerContext<T>) -> EnrollRoute<'a, T> {
         EnrollRoute {
             config,
             stream,
             code_buffer,
         }
     }
-    pub fn post(&mut self, req: Request) -> Result<(), Error> {
+    fn run(&mut self, req: Request) -> Result<(), Error> {
         // Parse the body of the request
         let body_str = std::str::from_utf8(&req.body[..req.body_len]).unwrap();
         let enroll_req = serde_json::from_str::<EnrollmentRequest>(body_str);
-        let mut resp = Response::new();
+        let mut builder = Response::builder();
 
         match enroll_req {
             Ok(enroll_req) => {

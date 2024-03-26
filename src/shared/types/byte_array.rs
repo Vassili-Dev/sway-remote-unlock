@@ -86,6 +86,21 @@ impl<const N: usize> ByteArray<N> {
 
         Ok(())
     }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.data[..self.length]
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.length
+    }
+    pub fn as_array(&self) -> &[u8; N] {
+        &self.data
+    }
 }
 
 impl<const N: usize> TryFrom<&[u8]> for ByteArray<N> {
@@ -223,26 +238,6 @@ impl<const N: usize> Serialize for ByteArray<N> {
     }
 }
 
-impl<const N: usize> dryoc::types::Bytes for ByteArray<N> {
-    fn as_slice(&self) -> &[u8] {
-        &self.data[..self.length]
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length == 0
-    }
-
-    fn len(&self) -> usize {
-        self.length
-    }
-}
-
-impl<const N: usize> dryoc::types::ByteArray<N> for ByteArray<N> {
-    fn as_array(&self) -> &[u8; N] {
-        &self.data
-    }
-}
-
 impl<const N: usize> Zeroize for ByteArray<N> {
     fn zeroize(&mut self) {
         self.data.zeroize();
@@ -334,6 +329,65 @@ impl<const N: usize> Display for ByteArrayString<N> {
     }
 }
 
+impl TryFrom<i8> for ByteArrayString<5> {
+    type Error = error::Error;
+    fn try_from(n: i8) -> Result<Self, error::Error> {
+        let mut data = [0; 5];
+        let digits = n.checked_ilog10().unwrap_or(0);
+
+        if digits == 0 {
+            return Ok(ByteArrayString::try_from("0")?);
+        }
+
+        let start_idx = if n < 0 {
+            data[0] = b'-';
+            1
+        } else {
+            0
+        };
+
+        let n = n.abs() as u8;
+        for digit in start_idx..digits {
+            let divisor = 10u8.pow(digits - digit - 1);
+            let digit = (n / divisor) % 10;
+            data[digit as usize] = b'0' + digit as u8;
+        }
+        Ok(ByteArrayString(ByteArray {
+            data,
+            length: digits as usize,
+        }))
+    }
+}
+
+impl TryFrom<i32> for ByteArrayString<11> {
+    type Error = error::Error;
+    fn try_from(n: i32) -> Result<Self, error::Error> {
+        let mut data = [0; 11];
+        let digits = n.checked_ilog10().unwrap_or(0);
+
+        if digits == 0 {
+            return Ok(ByteArrayString::try_from("0")?);
+        }
+
+        let start_idx = if n < 0 {
+            data[0] = b'-';
+            1
+        } else {
+            0
+        };
+
+        let n = n.abs() as u16;
+        for digit in start_idx..digits {
+            let divisor = 10u16.pow(digits - digit - 1);
+            let digit = (n / divisor) % 10;
+            data[digit as usize] = b'0' + digit as u8;
+        }
+        Ok(ByteArrayString(ByteArray {
+            data,
+            length: digits as usize,
+        }))
+    }
+}
 mod error {
     use crate::types::OwnError;
     use std::fmt::Display;

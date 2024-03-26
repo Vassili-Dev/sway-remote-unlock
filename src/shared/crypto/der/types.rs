@@ -2,7 +2,6 @@ use der::{
     Choice, Decode, DecodeOwned, DecodeValue, Encode, EncodeValue, FixedTag, Header, Length,
     Reader, Tagged, Writer,
 };
-use dryoc::types::Bytes;
 
 use crate::types::ByteArray;
 #[derive(Debug, PartialEq, Eq)]

@@ -1,11 +1,15 @@
 use code_buffer::CodeBuffer;
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
 use remote_unlock_lib::net::request::Request;
+use remote_unlock_lib::net::response::Response;
+use remote_unlock_lib::net::status::Status;
 use remote_unlock_lib::prelude::*;
 use std::net::TcpListener;
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
 
 mod code_buffer;
+mod context;
+mod router;
 mod routes;
 mod socket;
 mod state;
@@ -21,13 +25,32 @@ fn main() -> Result<(), Error> {
         TcpListener::bind((config.server_hostname(), config.server_port()))?;
     let mut code_buffer = code_buffer::CodeBuffer::new();
 
+    let mut context = context::ServerContext::builder()
+        .config(&config)
+        .code_receiver(server_recv)
+        .state(state::State::new())
+        .build()?;
+
     for stream in listener.incoming() {
-        let mut stream = stream.unwrap();
-        stream.set_nonblocking(true).unwrap();
+        let mut stream = stream?;
+        stream.set_nonblocking(true)?;
+        context.replace_stream(stream);
 
         process_codes(&mut code_buffer, &server_recv);
 
-        let req = Request::from_stream(&mut stream)?;
+        let req = match Request::from_stream(context.stream().ok_or(Error::new(
+            ErrorKind::Server,
+            Some("No stream for parsing request"),
+        ))?) {
+            Ok(req) => req,
+            Err(_e) => {
+                let error_resp = Response::new(Status::BadRequest);
+                error_resp.to_writer(&mut stream);
+
+                context.remove_stream();
+                continue;
+            }
+        };
 
         if req.path.unwrap().as_str()? == "/enroll" && req.method.unwrap().as_str()? == "POST" {
             routes::enroll::EnrollRoute::new(&config, &mut stream, &mut code_buffer).post(req)?;
@@ -36,6 +59,8 @@ fn main() -> Result<(), Error> {
         {
             routes::unlock::UnlockRoute::new(&config, &mut stream).post(req)?;
         }
+
+        context.remove_stream();
     }
 
     sock_handle.join().unwrap();

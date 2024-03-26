@@ -3,6 +3,7 @@ use core::fmt::Display;
 use rand::prelude::*;
 
 // 30 minutes
+#[allow(deprecated)]
 const CODE_LIFETIME: Duration = Duration::milliseconds(30 * 60 * 1000);
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]

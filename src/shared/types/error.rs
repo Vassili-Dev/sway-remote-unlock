@@ -26,6 +26,7 @@ pub enum ErrorKind {
     OversizePacket,
     CodeBufferFull,
     KeyExists,
+    ContentLengthMismatch,
 }
 
 impl Error {
@@ -44,6 +45,7 @@ impl Display for ErrorKind {
             ErrorKind::CodeBufferFull => write!(f, "Code buffer full"),
             ErrorKind::KeyExists => write!(f, "Key exists"),
             ErrorKind::UnkownStatus => write!(f, "Unknown status"),
+            ErrorKind::ContentLengthMismatch => write!(f, "Content length mismatch"),
         }
     }
 }

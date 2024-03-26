@@ -2,6 +2,7 @@ use std::io::Write;
 use std::path::Path;
 
 use remote_unlock_lib::crypto::key::PublicKey;
+use remote_unlock_lib::net::status::Status;
 use remote_unlock_lib::{
     net::{request::Request, response::Response},
     prelude::*,
@@ -16,6 +17,8 @@ pub struct UnlockRoute<'a> {
 }
 
 impl<'a> UnlockRoute<'a> {
+    const PATH: &'static str = "/unlock";
+
     pub fn new(config: &'a Config, stream: &'a mut std::net::TcpStream) -> UnlockRoute<'a> {
         UnlockRoute { config, stream }
     }
@@ -23,7 +26,7 @@ impl<'a> UnlockRoute<'a> {
         // Parse the body of the request
         let body_str = std::str::from_utf8(&req.body[..req.body_len]).unwrap();
         let unlock_req = serde_json::from_str::<UnlockRequest>(body_str);
-        let mut resp = Response::new();
+        let mut resp = Response::new(Status::Ok);
 
         match unlock_req {
             Ok(unlock_req) => {
@@ -36,7 +39,7 @@ impl<'a> UnlockRoute<'a> {
 
                 if signature_header.is_none() {
                     println!("{:?}", req.headers);
-                    resp.status = remote_unlock_lib::net::status::Status::BadRequest;
+                    resp.status = Status::BadRequest;
                     resp.to_writer(self.stream).unwrap();
                     self.stream.flush().unwrap();
                     return Ok(());
@@ -48,7 +51,7 @@ impl<'a> UnlockRoute<'a> {
                     .join(std::str::from_utf8(unlock_req.id()).unwrap());
 
                 if !pubkey_path.exists() {
-                    resp.status = remote_unlock_lib::net::status::Status::NotFound;
+                    resp.status = Status::NotFound;
                     resp.to_writer(self.stream).unwrap();
                     self.stream.flush().unwrap();
                     return Ok(());
@@ -58,7 +61,7 @@ impl<'a> UnlockRoute<'a> {
                 let pubkey = match PublicKey::read_pem_file(pubkey_path.as_path()) {
                     Ok(pubkey) => pubkey,
                     Err(_) => {
-                        resp.status = remote_unlock_lib::net::status::Status::InternalServerError;
+                        resp.status = Status::InternalServerError;
                         resp.to_writer(self.stream).unwrap();
                         self.stream.flush().unwrap();
                         return Ok(());

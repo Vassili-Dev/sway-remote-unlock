@@ -1,4 +1,5 @@
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
+use remote_unlock_lib::net::method::Method;
 use remote_unlock_lib::net::request::Request;
 use remote_unlock_lib::net::response::Response;
 use remote_unlock_lib::net::status::Status;
@@ -8,9 +9,10 @@ use std::os::unix::net::UnixStream;
 
 pub fn begin_enroll(config: &Config) -> Result<(), Error> {
     let mut stream = UnixStream::connect(config.socket_path()).unwrap();
-    let mut req = Request::new();
-    req.method = Some(ByteArray::try_from("POST".as_bytes())?);
-    req.path = Some(ByteArray::try_from("/begin_enroll".as_bytes())?);
+    let req = Request::builder()
+        .method(Method::POST)
+        .path("/begin_enroll")
+        .build();
 
     req.to_writer(&mut stream).unwrap();
     stream.shutdown(Shutdown::Write).unwrap();

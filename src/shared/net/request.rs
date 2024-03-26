@@ -2,11 +2,11 @@ use crate::prelude::*;
 
 use std::{io::Write, thread};
 
-use super::headers::Header;
+use super::{headers::Header, method::Method};
 
 pub struct Request<const HV: usize = { 64 * 2 }> {
     pub path: Option<ByteArray<128>>,
-    pub method: Option<ByteArray<16>>,
+    pub method: Option<Method>,
     pub headers: [Option<Header<32, HV>>; 16],
     pub body: [u8; 1024 * 2],
 
@@ -47,27 +47,30 @@ impl Request {
         }
     }
 
+    pub fn builder() -> RequestBuilder {
+        RequestBuilder::default()
+    }
+
     pub fn add_header(&mut self, name: &str, value: &str) -> Result<(), Error> {
         for header in self.headers.iter_mut() {
             match header {
                 Some(header) => {
                     if header.name.as_str()? == name {
-                        header.value.copy_from_slice(value.as_bytes())?;
+                        header.value = ByteArray::try_from(value.as_bytes())?;
                         return Ok(());
                     }
                 }
                 None => {
                     let mut new_header = Header::new();
-                    new_header.name.copy_from_slice(name.as_bytes())?;
-                    new_header.value.copy_from_slice(value.as_bytes())?;
+                    new_header.name = ByteArray::try_from(name.as_bytes())?;
+                    new_header.value = ByteArray::try_from(value.as_bytes())?;
                     *header = Some(new_header);
                     self.num_headers += 1;
                     return Ok(());
                 }
-            }
+            };
         }
-
-        Ok(())
+        Err(Error::new(ErrorKind::Server, Some("Too many headers")))
     }
 
     pub fn to_writer(&self, writer: &mut impl Write) -> Result<(), Error> {
@@ -76,7 +79,7 @@ impl Request {
             None => "/",
         };
         let method = match self.method.as_ref() {
-            Some(method) => method.as_str()?,
+            Some(method) => method.as_str(),
             None => "GET",
         };
 
@@ -102,7 +105,7 @@ impl Request {
     }
 
     pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Request, Error> {
-        let mut ret = Request::new();
+        let mut builder = Request::builder();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
 
@@ -145,16 +148,14 @@ impl Request {
             Err(e) => return Err(e.into()),
         };
 
-        ret.path = Some(ByteArray::try_from(
-            req.path
-                .ok_or(Error::new(ErrorKind::Server, Some("Path missing")))?
-                .as_bytes(),
-        )?);
-        ret.method = Some(ByteArray::try_from(
-            req.method
-                .ok_or(Error::new(ErrorKind::Server, Some("Method missing")))?
-                .as_bytes(),
-        )?);
+        let path = req
+            .path
+            .ok_or(Error::new(ErrorKind::Server, Some("Path missing")))?;
+        let method = req
+            .method
+            .ok_or(Error::new(ErrorKind::Server, Some("Method missing")))?;
+
+        builder = builder.path(path).method(method.into());
 
         let content_length = match req
             .headers
@@ -172,7 +173,7 @@ impl Request {
         for header in req.headers {
             if !header.name.is_empty() {
                 let hv = std::str::from_utf8(header.value)?;
-                ret.add_header(header.name, hv)?;
+                builder = builder.add_header(header.name, hv)?;
             }
         }
 
@@ -180,15 +181,148 @@ impl Request {
         let body_end_ptr = status + content_length;
 
         let body = &buf[body_start_ptr..body_end_ptr];
-        ret.write_all(body)?;
-        ret.body_len = content_length;
+        builder = builder.append_body(body)?;
+
+        let ret = builder.build();
+
+        if ret.body_len != content_length {
+            let sign = if ret.body_len < content_length { -1 } else { 1 };
+            let (larger, smaller) = if sign == 1 {
+                (content_length, ret.body_len)
+            } else {
+                (ret.body_len, content_length)
+            };
+
+            let diff = larger - smaller;
+            let diff = i32::try_from(diff).unwrap_or(i32::MAX);
+            let diff = diff * sign;
+
+            return Err(Error::new(
+                ErrorKind::ContentLengthMismatch,
+                Some(ByteArray::from(ByteArrayString::try_from(diff)?).as_str()?),
+            ));
+        }
 
         Ok(ret)
+    }
+
+    pub fn path(&self) -> Option<&str> {
+        match self.path.as_ref() {
+            Some(path) => match path.as_str() {
+                Ok(path) => Some(path),
+                Err(_) => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn method(&self) -> Option<&Method> {
+        self.method.as_ref()
     }
 }
 
 impl Default for Request {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub struct RequestBuilder<const HV: usize = { 64 * 2 }> {
+    path: Option<ByteArray<128>>,
+    method: Option<Method>,
+    headers: [Option<Header<32, HV>>; 16],
+    body: [u8; 1024 * 2],
+    body_len: usize,
+    body_written: usize,
+    num_headers: usize,
+}
+
+impl<const HV: usize> Default for RequestBuilder<HV> {
+    fn default() -> Self {
+        Self {
+            path: None,
+            method: None,
+            headers: [None; 16],
+            body: [0; 1024 * 2],
+            body_len: 0,
+            body_written: 0,
+            num_headers: 0,
+        }
+    }
+}
+
+impl<const HV: usize> RequestBuilder<HV> {
+    pub fn path(mut self, path: &str) -> Self {
+        self.path = Some(ByteArray::try_from(path.as_bytes()).unwrap());
+        self
+    }
+
+    pub fn method(mut self, method: Method) -> Self {
+        self.method = Some(method);
+        self
+    }
+
+    pub fn add_header(mut self, name: &str, value: &str) -> Result<Self, Error> {
+        for header in self.headers.iter_mut() {
+            match header {
+                Some(header) => {
+                    if header.name.as_str()? == name {
+                        header.value = ByteArray::try_from(value.as_bytes())?;
+                        return Ok(self);
+                    }
+                }
+                None => {
+                    let mut new_header = Header::new();
+                    new_header.name = ByteArray::try_from(name.as_bytes())?;
+                    new_header.value = ByteArray::try_from(value.as_bytes())?;
+                    *header = Some(new_header);
+                    self.num_headers += 1;
+                    return Ok(self);
+                }
+            };
+        }
+        Err(Error::new(ErrorKind::Server, Some("Too many headers")))
+    }
+
+    pub fn append_body(mut self, body: &[u8]) -> Result<Self, Error> {
+        self.write_all(body)?;
+        Ok(self)
+    }
+
+    pub fn body(mut self, body: &[u8]) -> Self {
+        self.body_written = body.len();
+        self.body[..self.body_written].copy_from_slice(body);
+        self.body_len = self.body_written;
+        self
+    }
+
+    pub fn build(self) -> Request<HV> {
+        Request {
+            path: self.path,
+            method: self.method,
+            headers: self.headers,
+            body: self.body,
+            body_len: self.body_len,
+            body_written: self.body_written,
+            num_headers: self.num_headers,
+        }
+    }
+}
+
+impl<const HV: usize> Write for RequestBuilder<HV> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let remaining = self.body.len() - self.body_written;
+        let write_amt = std::cmp::min(remaining, buf.len());
+
+        self.body[self.body_written..self.body_written + write_amt]
+            .copy_from_slice(&buf[..write_amt]);
+        self.body_written += write_amt;
+        self.body_len = self.body_written;
+
+        Ok(write_amt)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }

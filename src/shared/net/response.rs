@@ -33,11 +33,11 @@ impl Write for Response {
 }
 
 impl Response {
-    pub fn new() -> Response {
+    pub fn new(status: Status) -> Response {
         let headers = [None; 16];
 
         Response {
-            status: Status::Ok,
+            status,
             headers,
             body: [0; 1024 * 2],
             body_len: 0,
@@ -95,7 +95,7 @@ impl Response {
     }
 
     pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Response, Error> {
-        let mut ret = Response::new();
+        let mut ret = Response::new(Status::Ok);
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
 
@@ -179,6 +179,6 @@ impl Response {
 
 impl Default for Response {
     fn default() -> Self {
-        Self::new()
+        Self::new(Status::Ok)
     }
 }
