@@ -56,8 +56,7 @@ impl State {
     }
 
     pub fn update_nonce(&mut self, id: uuid::Uuid, nonce: u128) {
-        let file_id = id.clone();
-        Self::save_nonce_to_file_async(file_id, nonce);
+        Self::save_nonce_to_file_async(id, nonce);
 
         self.nonces.insert(id, nonce);
     }
@@ -83,15 +82,13 @@ impl State {
                 debug!("Loaded nonce: {}", nonce_str);
 
                 let nonce = nonce_str.parse::<u128>().unwrap_or(0);
-                return Ok(nonce);
+                Ok(nonce)
             }
-            Err(e) if (&e).kind() == std::io::ErrorKind::NotFound => {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 debug!("Nonce file not found: {:?}", &path);
-                return Err(e.into());
+                Err(e.into())
             }
-            Err(e) => {
-                return Err(e.into());
-            }
+            Err(e) => Err(e.into()),
         }
     }
 
