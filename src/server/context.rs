@@ -34,7 +34,7 @@ impl<'a, T: Write> ServerContext<'a, T> {
     }
 
     pub fn config(&self) -> &Config {
-        &self.config
+        self.config
     }
 
     pub fn stream(&mut self) -> Result<&mut T, Error> {

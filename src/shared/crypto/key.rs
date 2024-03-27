@@ -34,7 +34,7 @@ impl PublicKey {
         io::copy(&mut file, &mut bytes)?;
 
         SubjectPublicKeyInfoOwned::from_pem(bytes.as_bytes())
-            .map(|k| Self(k))
+            .map(Self)
             .map_err(|err| err.into())
     }
 
@@ -49,7 +49,7 @@ impl PublicKey {
         io::copy(&mut file, &mut bytes)?;
 
         SubjectPublicKeyInfoOwned::from_der(bytes.as_bytes())
-            .map(|k| Self(k))
+            .map(Self)
             .map_err(|err| err.into())
     }
 
@@ -122,7 +122,7 @@ impl PrivateKey {
         let pem_str = std::str::from_utf8(bytes.as_bytes())?;
 
         SecretDocument::from_pkcs8_pem(pem_str)
-            .map(|k| Self(k))
+            .map(Self)
             .map_err(|err| err.into())
     }
 
@@ -137,7 +137,7 @@ impl PrivateKey {
         io::copy(&mut file, &mut bytes)?;
 
         SecretDocument::from_pkcs8_der(bytes.as_bytes())
-            .map(|k| Self(k))
+            .map(Self)
             .map_err(|err| err.into())
     }
 

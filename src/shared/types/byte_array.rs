@@ -285,7 +285,7 @@ impl TryFrom<u16> for ByteArrayString<5> {
         let digits = n.checked_ilog10().unwrap_or(0);
 
         if digits == 0 {
-            return Ok(ByteArrayString::try_from("0")?);
+            return ByteArrayString::try_from("0");
         }
 
         for digit in 0..digits {
@@ -307,13 +307,13 @@ impl TryFrom<u8> for ByteArrayString<5> {
         let digits = n.checked_ilog10().unwrap_or(0);
 
         if digits == 0 {
-            return Ok(ByteArrayString::try_from("0")?);
+            return ByteArrayString::try_from("0");
         }
 
         for digit in 0..digits {
             let divisor = 10u8.pow(digits - digit - 1);
             let digit = (n / divisor) % 10;
-            data[digit as usize] = b'0' + digit as u8;
+            data[digit as usize] = b'0' + digit;
         }
         Ok(ByteArrayString(ByteArray {
             data,
@@ -347,7 +347,7 @@ impl TryFrom<i8> for ByteArrayString<5> {
         let digits = n.checked_ilog10().unwrap_or(0);
 
         if digits == 0 {
-            return Ok(ByteArrayString::try_from("0")?);
+            return ByteArrayString::try_from("0");
         }
 
         let start_idx = if n < 0 {
@@ -357,11 +357,11 @@ impl TryFrom<i8> for ByteArrayString<5> {
             0
         };
 
-        let n = n.abs() as u8;
+        let n = n.unsigned_abs();
         for digit in start_idx..digits {
             let divisor = 10u8.pow(digits - digit - 1);
             let digit = (n / divisor) % 10;
-            data[digit as usize] = b'0' + digit as u8;
+            data[digit as usize] = b'0' + digit;
         }
         Ok(ByteArrayString(ByteArray {
             data,
@@ -377,7 +377,7 @@ impl TryFrom<i32> for ByteArrayString<11> {
         let digits = n.checked_ilog10().unwrap_or(0);
 
         if digits == 0 {
-            return Ok(ByteArrayString::try_from("0")?);
+            return ByteArrayString::try_from("0");
         }
 
         let start_idx = if n < 0 {
@@ -387,7 +387,7 @@ impl TryFrom<i32> for ByteArrayString<11> {
             0
         };
 
-        let n = n.abs() as u16;
+        let n = n.unsigned_abs() as u16;
         for digit in start_idx..digits {
             let divisor = 10u16.pow(digits - digit - 1);
             let digit = (n / divisor) % 10;

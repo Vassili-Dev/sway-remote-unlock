@@ -17,13 +17,12 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), E
     match args.output {
         Some(ref output) => {
             // Ensure the directory for the keys exists
-            std::fs::create_dir_all(&config.generated_keys_dir())?;
+            std::fs::create_dir_all(config.generated_keys_dir())?;
 
             // Write the public key to a file
             let public_key_path =
                 Path::new(&config.generated_keys_dir()).join(format!("{}.pub", output));
-            let private_key_path =
-                Path::new(&config.generated_keys_dir()).join(format!("{}", output));
+            let private_key_path = Path::new(&config.generated_keys_dir()).join(output);
 
             if private_key_path.exists() && !args.force {
                 return Err(Error::new(ErrorKind::KeyExists, Some(output)));
@@ -33,11 +32,11 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), E
             }
 
             match args.format {
-                KeyFormat::DER => {
+                KeyFormat::Der => {
                     pubkey.save_to_der_file(public_key_path.as_path())?;
                     privkey.save_to_der_file(private_key_path.as_path())?;
                 }
-                KeyFormat::PEM => {
+                KeyFormat::Pem => {
                     pubkey.save_to_pem_file(public_key_path.as_path())?;
                     privkey.save_to_pem_file(private_key_path.as_path())?;
                 }
@@ -46,11 +45,11 @@ pub fn generate_keys(config: &Config, args: GenerateKeysCommand) -> Result<(), E
         None => {
             // Print to stdout
             match args.format {
-                KeyFormat::DER => {
+                KeyFormat::Der => {
                     pubkey.der()?.to_stdout_raw()?;
                     privkey.der()?.to_stdout_raw()?;
                 }
-                KeyFormat::PEM => {
+                KeyFormat::Pem => {
                     println!("{}", pubkey.pem()?.as_str()?);
                     println!("{}", privkey.pem()?.as_str()?);
                 }

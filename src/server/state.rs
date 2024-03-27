@@ -17,10 +17,12 @@ impl State {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_nonce(&self, id: &uuid::Uuid) -> Option<&u128> {
         self.nonces.get(id)
     }
 
+    #[allow(dead_code)]
     pub fn increment_nonce(&mut self, id: uuid::Uuid) {
         let nonce = self.nonces.entry(id).or_insert(0);
         *nonce += 1;

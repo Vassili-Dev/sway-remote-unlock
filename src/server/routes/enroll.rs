@@ -59,14 +59,14 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for EnrollRoute<'a, 'c, T> {
                     trace!("Writing response");
                     serde_json::to_writer(&mut resp, &enroll_response)?;
 
-                    return Ok(resp);
+                    Ok(resp)
                 } else {
-                    return Ok(builder.status(Status::Forbidden).build());
+                    Ok(builder.status(Status::Forbidden).build())
                 }
             }
             Err(e) => {
                 error!("Error parsing enrollment request: {}", e);
-                return Ok(builder.status(Status::BadRequest).build());
+                Ok(builder.status(Status::BadRequest).build())
             }
         }
     }

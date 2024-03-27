@@ -165,21 +165,20 @@ impl<const HV: usize> Response<HV> {
         trace!("Finished parsing httparse request");
 
         trace!("Building response from parsed data");
-        let code = (&response).code.ok_or(Error::new(
+        let code = response.code.ok_or(Error::new(
             ErrorKind::Server,
             Some("No status code in response"),
         ))?;
 
         if code != 200 {
             let code_str: ByteArray<5> = ByteArrayString::try_from(code)?.into();
-            let message: ByteArray<{ Config::ERROR_STRING_SIZE }> =
+            let mut message: ByteArray<{ Config::ERROR_STRING_SIZE }> =
                 ByteArrayString::<{ Config::ERROR_STRING_SIZE }>::try_from(
                     "Server returned status code",
                 )?
                 .into();
 
             warn!("Received non-200 status code: {}", code_str.as_str()?);
-            let mut message = ByteArray::from(message);
             message.append_slice(code_str.as_bytes())?;
 
             return Err(Error::new(ErrorKind::Server, Some(message.as_str()?)));

@@ -28,7 +28,7 @@ pub struct Config {
 impl Config {
     pub const MAX_PACKET_SIZE: usize = 1024 * 4;
     pub const BUFFER_SIZE: usize = 1024;
-    pub const ERROR_STRING_SIZE: usize = 64 * 2;
+    pub const ERROR_STRING_SIZE: usize = 32;
     pub const STREAM_RETRY_DELAY_MS: u64 = 100;
 
     pub fn new() -> Config {
