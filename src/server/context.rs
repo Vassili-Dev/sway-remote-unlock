@@ -68,6 +68,7 @@ impl<'a, T: Write> ServerContext<'a, T> {
 
         Ok(())
     }
+
     pub fn init(&mut self) -> Result<(), Error> {
         logging::Logger::init(self.config)?;
         self.create_storage_dirs()?;
