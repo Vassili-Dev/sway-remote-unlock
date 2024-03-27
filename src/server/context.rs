@@ -52,9 +52,19 @@ impl<'a, T: Write> ServerContext<'a, T> {
     }
 
     pub fn create_storage_dirs(&mut self) -> Result<(), Error> {
-        let storage_dir = self.config.storage_dir();
-        trace!("Creating storage directory: {}", storage_dir);
-        std::fs::create_dir_all(storage_dir)?;
+        let keys_dir = self.config.keys_dir();
+        debug!(
+            "Creating keys directory: {}",
+            keys_dir.to_str().unwrap_or("Malformed path")
+        );
+        std::fs::create_dir_all(keys_dir)?;
+
+        let nonce_dir = self.config.nonce_dir();
+        debug!(
+            "Creating nonce directory: {}",
+            nonce_dir.to_str().unwrap_or("Malformed path")
+        );
+        std::fs::create_dir_all(nonce_dir)?;
 
         Ok(())
     }

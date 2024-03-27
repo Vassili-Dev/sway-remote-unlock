@@ -1,7 +1,3 @@
-use std::io::Write;
-use std::net::TcpStream;
-use std::path::Path;
-
 use remote_unlock_lib::crypto::key::PublicKey;
 use remote_unlock_lib::net::method::Method;
 use remote_unlock_lib::net::status::Status;
@@ -10,6 +6,8 @@ use remote_unlock_lib::{
     prelude::*,
     unlock_request::UnlockRequestBody,
 };
+use std::io::Write;
+use std::net::TcpStream;
 
 use base64::prelude::*;
 
@@ -50,7 +48,10 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
                     }
                 };
 
-                let mut pubkey_path = Path::new(self.context.config().storage_dir())
+                let mut pubkey_path = self
+                    .context
+                    .config()
+                    .keys_dir()
                     .join(std::str::from_utf8(unlock_req.id())?);
 
                 pubkey_path.set_extension("pub");

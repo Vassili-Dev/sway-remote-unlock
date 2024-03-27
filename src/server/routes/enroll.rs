@@ -43,8 +43,7 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for EnrollRoute<'a, 'c, T> {
                     let pem = enroll_req.pubkey_pem();
                     let pubkey =
                         remote_unlock_lib::crypto::key::PublicKey::from_pem(pem.as_bytes())?;
-                    let mut path =
-                        std::path::Path::new(self.context.config().storage_dir()).join(&id);
+                    let mut path = self.context.config().keys_dir().join(&id);
 
                     path.set_extension("pub");
                     pubkey.save_to_pem_file(path.as_path())?;

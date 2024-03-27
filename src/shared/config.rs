@@ -1,4 +1,7 @@
-use std::str::FromStr;
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/remote_unlock.sock";
 const DEFAULT_STORAGE_DIR: &str = "./var/lib/remote_unlock";
@@ -28,7 +31,7 @@ pub struct Config {
 impl Config {
     pub const MAX_PACKET_SIZE: usize = 1024 * 4;
     pub const BUFFER_SIZE: usize = 1024;
-    pub const ERROR_STRING_SIZE: usize = 32;
+    pub const ERROR_STRING_SIZE: usize = 64;
     pub const STREAM_RETRY_DELAY_MS: u64 = 100;
 
     pub fn new() -> Config {
@@ -66,11 +69,19 @@ impl Config {
         }
     }
 
-    pub fn storage_dir(&self) -> &str {
+    fn storage_dir(&self) -> &str {
         match &self.storage_dir {
             Some(path) => path,
             None => DEFAULT_STORAGE_DIR,
         }
+    }
+
+    pub fn keys_dir(&self) -> PathBuf {
+        Path::new(self.storage_dir()).join("keys")
+    }
+
+    pub fn nonce_dir(&self) -> PathBuf {
+        Path::new(self.storage_dir()).join("nonces")
     }
 
     #[cfg(debug_assertions)]
