@@ -18,18 +18,37 @@ impl<'a> UnlockRequestBody<'a> {
         signature: &[u8],
         pubkey: &crate::crypto::key::PublicKey,
     ) -> Result<bool, Error> {
+        trace!("Start request signature verification");
         let mut serial: ByteArray<SERIAL_LEN> = ByteArray::new();
 
+        trace!("Serializing request to sign");
         serde_json::to_writer(&mut serial, self)?;
 
+        debug!(
+            "Serialized request for signature verification: {}",
+            &serial.as_str()?
+        );
+
+        trace!("Decoding public key from der");
         let verifying_key: VerifyingKey =
             p256::PublicKey::from_public_key_der(pubkey.der()?.as_bytes())?.into();
 
-        let signature = ecdsa::Signature::from_der(signature)?;
+        trace!("Decoded public key");
 
+        trace!("Decoding signature from der");
+        let signature = ecdsa::Signature::from_der(signature)?;
+        trace!("Decoded signature");
+
+        debug!("Verifying signature");
         match verifying_key.verify(serial.as_bytes(), &signature) {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
+            Ok(_) => {
+                debug!("Signature verified");
+                Ok(true)
+            }
+            Err(e) => {
+                warn!("Signature verification failed: {}", e);
+                Ok(false)
+            }
         }
     }
 

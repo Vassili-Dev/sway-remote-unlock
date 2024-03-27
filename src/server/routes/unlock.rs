@@ -29,9 +29,11 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
         Self { context }
     }
     fn run(&mut self, req: &Request) -> Result<Response, Error> {
+        trace!("Parsing unlock request");
         // Parse the body of the request
         let body_str = std::str::from_utf8(&req.body[..req.body_len])?;
         let unlock_req = serde_json::from_str::<UnlockRequestBody>(body_str);
+        debug!("Unlock request: {:?}", &unlock_req);
         let builder = Response::builder();
 
         match unlock_req {
@@ -42,6 +44,7 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
                 let signature_header = match signature_header {
                     Some(s) => s,
                     None => {
+                        warn!("Unsigned unlock request received");
                         let resp = builder.status(Status::BadRequest).build();
                         return Ok(resp);
                     }
@@ -52,7 +55,9 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
 
                 pubkey_path.set_extension("pub");
 
+                debug!("Opening public key file: {:?}", &pubkey_path);
                 if !pubkey_path.exists() {
+                    warn!("Public key not found for user: {:?}", &unlock_req.id());
                     let resp = builder.status(Status::NotFound).build();
                     return Ok(resp);
                 }
@@ -61,13 +66,21 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
                 let pubkey = match PublicKey::read_pem_file(pubkey_path.as_path()) {
                     Ok(pubkey) => pubkey,
                     Err(_) => {
+                        error!("Error parsing public key file");
                         return Ok(builder.status(Status::InternalServerError).build());
                     }
                 };
 
+                debug!("Public key loaded: {:?}", &pubkey.inner());
+
+                trace!("Decoding signature from Base64 Header");
                 let mut signature_bytes = [0u8; 1024];
                 let signature_length = BASE64_STANDARD
                     .decode_slice(signature_header.value.as_bytes(), &mut signature_bytes)?;
+                debug!(
+                    "Signature received: {:?}",
+                    &signature_bytes[..signature_length]
+                );
 
                 let signature_valid =
                     unlock_req.verify(&signature_bytes[..signature_length], &pubkey)?;
@@ -82,6 +95,7 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
                 if valid_request {
                     Ok(builder.status(Status::Ok).build())
                 } else {
+                    warn!("Unlock request authorization failed");
                     Ok(builder.status(Status::Forbidden).build())
                 }
             }

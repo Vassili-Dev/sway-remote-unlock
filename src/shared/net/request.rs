@@ -16,7 +16,7 @@ pub struct Request<const HV: usize = { 64 * 2 }> {
     num_headers: usize,
 }
 
-impl Write for Request {
+impl<const HV: usize> Write for Request<HV> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let remaining = self.body.len() - self.body_written;
         let write_amt = std::cmp::min(remaining, buf.len());
@@ -88,6 +88,7 @@ impl<const HV: usize> Request<HV> {
     }
 
     pub fn to_writer(&self, writer: &mut impl Write) -> Result<(), Error> {
+        trace!("Writing request to writer");
         let path = match self.path.as_ref() {
             Some(path) => path.as_str()?,
             None => "/",
@@ -97,8 +98,10 @@ impl<const HV: usize> Request<HV> {
             None => "GET",
         };
 
+        trace!("Writing HTTP request line");
         writer.write_fmt(format_args!("{} {} HTTP/1.1\r\n", method, path))?;
 
+        trace!("Writing request headers");
         for header in self.headers.iter().take(self.num_headers) {
             match header {
                 Some(header) => {
@@ -112,13 +115,20 @@ impl<const HV: usize> Request<HV> {
             }
         }
         // Write content length
+
+        trace!("Writing content length header");
         writer.write_fmt(format_args!("Content-Length: {}\r\n", self.body_written))?;
         writer.write_all(b"\r\n")?;
+
+        trace!("Writing request body");
         writer.write_all(&self.body[..self.body_written])?;
+
+        trace!("Finished writing request");
         Ok(())
     }
 
     pub fn from_stream(stream: &mut impl std::io::Read) -> Result<Self, Error> {
+        trace!("Parsing request from stream");
         let mut builder = Self::builder();
         let mut buf = [0; Config::MAX_PACKET_SIZE];
         let mut buf_ptr = 0;
@@ -141,18 +151,26 @@ impl<const HV: usize> Request<HV> {
             };
 
             if (read_amt == 0) && (buf_ptr == 0) {
+                trace!(
+                    "No data received, trying again in {}ms",
+                    Config::STREAM_RETRY_DELAY_MS
+                );
                 // Wait for request
-                thread::sleep(std::time::Duration::from_millis(100));
+                thread::sleep(std::time::Duration::from_millis(
+                    Config::STREAM_RETRY_DELAY_MS,
+                ));
                 continue;
             }
 
             buf_ptr += read_amt;
 
             if read_amt == 0 {
+                trace!("Finished reading data from stream");
                 break;
             }
         }
 
+        trace!("Parsing httparse request");
         // Process the buffer into a request
         let mut headers = [httparse::EMPTY_HEADER; 16];
         let mut req = httparse::Request::new(&mut headers);
@@ -162,15 +180,23 @@ impl<const HV: usize> Request<HV> {
             Err(e) => return Err(e.into()),
         };
 
+        trace!("Finished parsing httparse request");
+
+        trace!("Building request from parsed data");
         let path = req
             .path
             .ok_or(Error::new(ErrorKind::Server, Some("Path missing")))?;
+
+        trace!("Path: {}", path);
+
         let method = req
             .method
             .ok_or(Error::new(ErrorKind::Server, Some("Method missing")))?;
+        trace!("Method: {}", method);
 
         builder = builder.path(path).method(method.into());
 
+        trace!("Looking for content-length header");
         let content_length = match req
             .headers
             .iter()
@@ -183,10 +209,14 @@ impl<const HV: usize> Request<HV> {
         let content_length = std::str::from_utf8(content_length)?
             .parse::<usize>()
             .unwrap_or(0);
+        trace!("Content-Length: {}", content_length);
 
+        trace!("Adding headers to request");
         for header in req.headers {
             if !header.name.is_empty() {
                 let hv = std::str::from_utf8(header.value)?;
+
+                trace!("Header: {}: {}", header.name, hv);
                 builder = builder.add_header(header.name, hv)?;
             }
         }
@@ -195,11 +225,16 @@ impl<const HV: usize> Request<HV> {
         let body_end_ptr = status + content_length;
 
         let body = &buf[body_start_ptr..body_end_ptr];
+        trace!("Adding body to request: {} bytes", body.len());
         builder = builder.append_body(body)?;
 
         let ret = builder.build();
 
         if ret.body_len != content_length {
+            error!(
+                "Content-Length mismatch: {} vs {}",
+                ret.body_len, content_length
+            );
             let sign = if ret.body_len < content_length { -1 } else { 1 };
             let (larger, smaller) = if sign == 1 {
                 (content_length, ret.body_len)
@@ -216,6 +251,8 @@ impl<const HV: usize> Request<HV> {
                 Some(ByteArray::from(ByteArrayString::try_from(diff)?).as_str()?),
             ));
         }
+
+        trace!("Finished parsing request");
 
         Ok(ret)
     }
@@ -295,6 +332,8 @@ impl<const HV: usize> RequestBuilder<HV> {
                 }
             };
         }
+
+        error!("Too many headers");
         Err(Error::new(ErrorKind::Server, Some("Too many headers")))
     }
 
@@ -325,6 +364,7 @@ impl<const HV: usize> RequestBuilder<HV> {
 
 impl<const HV: usize> Write for RequestBuilder<HV> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        trace!("Writing to request builder");
         let remaining = self.body.len() - self.body_written;
         let write_amt = std::cmp::min(remaining, buf.len());
 
@@ -332,6 +372,8 @@ impl<const HV: usize> Write for RequestBuilder<HV> {
             .copy_from_slice(&buf[..write_amt]);
         self.body_written += write_amt;
         self.body_len = self.body_written;
+
+        trace!("Wrote {} bytes", write_amt);
 
         Ok(write_amt)
     }

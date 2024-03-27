@@ -54,9 +54,13 @@ impl CodeBuffer {
         match found {
             Some(c) => {
                 *c = None;
+                debug!("Code verified and removed from buffer: {}", code);
                 true
             }
-            None => false,
+            None => {
+                warn!("Invalid code attempt: {}", code);
+                false
+            }
         }
     }
 }

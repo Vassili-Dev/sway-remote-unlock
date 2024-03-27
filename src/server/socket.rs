@@ -49,7 +49,7 @@ pub fn run_socket(code_channel_sender: Sender<EnrollmentCode>) -> Result<JoinHan
             if path_str == "/begin_enroll" && method_str == "POST" {
                 let code: EnrollmentCode = EnrollmentCode::new();
 
-                let mut resp = Response::new(Status::Ok);
+                let mut resp = Response::<{ 64 * 2 }>::new(Status::Ok);
                 serde_json::to_writer(&mut resp, &code).unwrap();
                 match resp.add_header("Content-Type", "application/json") {
                     Ok(_) => {}

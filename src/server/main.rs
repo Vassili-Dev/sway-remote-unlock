@@ -41,14 +41,16 @@ fn main() -> Result<(), Error> {
 
     for stream in listener.incoming() {
         let stream = stream?;
+        trace!("New connection from: {}", stream.peer_addr()?);
         stream.set_nonblocking(true)?;
         context.replace_stream(stream);
+
         context.process_codes()?;
 
         let req = match Request::from_stream(context.stream()?) {
             Ok(req) => req,
             Err(_e) => {
-                let error_resp = Response::new(Status::BadRequest);
+                let error_resp = Response::<{ 64 * 2 }>::new(Status::BadRequest);
                 error_resp.to_writer(context.stream()?)?;
 
                 context.remove_stream();
@@ -58,11 +60,19 @@ fn main() -> Result<(), Error> {
 
         let router = router::Router::new();
 
-        router.route(&mut context, &req)?;
+        match router.route(&mut context, &req) {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Error routing request: {}", e);
+                let error_resp = Response::<{ 64 * 2 }>::new(Status::InternalServerError);
+                error_resp.to_writer(context.stream()?)?;
+            }
+        };
 
         context.remove_stream();
     }
 
+    info!("Shutting down server");
     sock_handle.join().unwrap();
 
     Ok(())

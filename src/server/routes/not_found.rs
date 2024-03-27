@@ -24,6 +24,7 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for NotFound<'a, 'c, T> {
     }
 
     fn run(&mut self, _req: &Request) -> Result<Response, Error> {
+        warn!("Invalid route requested");
         let mut response = Response::new(Status::NotFound);
         response.add_header("Content-Type", "text/plain")?;
         response.write("Not found".as_bytes())?;

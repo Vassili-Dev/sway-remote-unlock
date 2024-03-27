@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::code_buffer::CodeBuffer;
+use remote_unlock_lib::prelude::*;
 
 pub struct State {
     // Map of strictly increasing nonces for each client
@@ -26,13 +27,20 @@ impl State {
     }
 
     pub fn validate_and_update_nonce(&mut self, id: &uuid::Uuid, nonce: u128) -> bool {
+        trace!("Checking nonce for id: {}", &id);
         let result = match self.nonces.get(id) {
             Some(last_nonce) => nonce > *last_nonce,
-            None => true,
+            None => {
+                debug!("No nonce found for id: {}, starting at 0", &id);
+                true
+            }
         };
 
         if result {
+            trace!("Updating nonce for id: {}", &id);
             self.nonces.insert(*id, nonce);
+        } else {
+            warn!("Invalid nonce for id: {}", &id);
         }
 
         result

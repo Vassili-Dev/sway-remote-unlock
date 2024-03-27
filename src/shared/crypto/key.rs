@@ -54,12 +54,16 @@ impl PublicKey {
     }
 
     pub fn save_to_pem_file(&self, path: &Path) -> Result<(), Error> {
+        debug!("Saving public key to file: {:?}", path);
         let mut pem = self.pem()?;
 
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create(true);
+
+        trace!("Opening file: {:?}", path);
         let mut file = options.open(path)?;
 
+        trace!("Copying public key to file");
         std::io::copy(&mut pem, &mut file)?;
 
         Ok(())

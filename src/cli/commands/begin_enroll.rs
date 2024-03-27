@@ -16,7 +16,7 @@ pub fn begin_enroll(config: &Config) -> Result<(), Error> {
 
     req.to_writer(&mut stream)?;
     stream.shutdown(Shutdown::Write)?;
-    let response = Response::from_stream(&mut stream)?;
+    let response = Response::<{ 64 * 2 }>::from_stream(&mut stream)?;
 
     if response.status != Status::Ok {
         let err = Error::new(ErrorKind::Server, Some(response.status.to_string()));

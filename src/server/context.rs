@@ -65,6 +65,8 @@ impl<'a, T: Write> ServerContext<'a, T> {
     }
 
     pub fn process_codes(&mut self) -> Result<(), Error> {
+        trace!("Processing codes from buffer");
+
         let code_buffer = self.state.code_buffer();
         let code_receiver = &self.code_receiver;
 
@@ -74,7 +76,9 @@ impl<'a, T: Write> ServerContext<'a, T> {
         // Drain the code channel into the buffer
         'buffer_drain: while let Ok(code) = code_receiver.try_recv() {
             match code_buffer.insert(code) {
-                Ok(_) => {}
+                Ok(_) => {
+                    debug!("Inserted code into buffer: {}", code);
+                }
                 Err(_) => {
                     warn!("Code buffer full, ignoring code {:?}", code);
                     break 'buffer_drain;

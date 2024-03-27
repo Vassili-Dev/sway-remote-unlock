@@ -1,13 +1,12 @@
 use std::{io::Write, net::TcpStream};
 
+use crate::context::ServerContext;
 use remote_unlock_lib::{
     enroll_request::EnrollmentRequest,
     enroll_response,
     net::{method::Method, request::Request, response::Response, status::Status},
     prelude::*,
 };
-
-use crate::context::ServerContext;
 
 use super::route::Route;
 
@@ -24,8 +23,11 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for EnrollRoute<'a, 'c, T> {
     }
     fn run(&mut self, req: &Request) -> Result<Response, Error> {
         // Parse the body of the request
+        trace!("Parsing enrollment request");
         let body_str = std::str::from_utf8(&req.body[..req.body_len])?;
         let enroll_req = serde_json::from_str::<EnrollmentRequest>(body_str);
+        debug!("Enrollment request: {:?}", &enroll_req);
+
         let builder = Response::builder();
 
         match enroll_req {
@@ -35,20 +37,26 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for EnrollRoute<'a, 'c, T> {
 
                 let mut id_buf: [u8; 32] = [0; 32];
                 let id = enroll_response.id().as_simple().encode_lower(&mut id_buf);
+                trace!("Enrollment ID: {}", &id);
 
                 if self.context.state().code_buffer().verify(code) {
                     let pem = enroll_req.pubkey_pem();
                     let pubkey =
                         remote_unlock_lib::crypto::key::PublicKey::from_pem(pem.as_bytes())?;
                     let mut path =
-                        std::path::Path::new(self.context.config().storage_dir()).join(id);
+                        std::path::Path::new(self.context.config().storage_dir()).join(&id);
 
                     path.set_extension("pub");
                     pubkey.save_to_pem_file(path.as_path())?;
+
+                    trace!("Public key saved for user: {}", &id);
+
                     let mut resp = builder
                         .status(Status::Ok)
                         .add_header("Content-Type", "application/json")?
                         .build();
+
+                    trace!("Writing response");
                     serde_json::to_writer(&mut resp, &enroll_response)?;
 
                     return Ok(resp);
@@ -108,7 +116,7 @@ mod tests {
 
         resp.to_writer(context.stream().unwrap()).unwrap();
 
-        let resp = Response::from_stream(&mut context.stream().unwrap()).unwrap();
+        let resp = Response::<{ 64 * 2 }>::from_stream(&mut context.stream().unwrap()).unwrap();
 
         assert!(resp.status == remote_unlock_lib::net::status::Status::Ok);
     }
