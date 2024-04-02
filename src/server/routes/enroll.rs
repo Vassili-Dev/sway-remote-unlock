@@ -21,6 +21,15 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for EnrollRoute<'a, 'c, T> {
     fn new(context: &'a mut ServerContext<'c, T>) -> EnrollRoute<'a, 'c, T> {
         Self { context }
     }
+
+    fn context(&mut self) -> &mut ServerContext<'c, T> {
+        self.context
+    }
+
+    fn post_run(&mut self, _response: &Response) -> Result<(), Error> {
+        Ok(())
+    }
+
     fn run(&mut self, req: &Request) -> Result<Response, Error> {
         // Parse the body of the request
         trace!("Parsing enrollment request");

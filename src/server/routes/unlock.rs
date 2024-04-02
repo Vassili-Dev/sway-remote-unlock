@@ -17,6 +17,7 @@ use super::route::Route;
 
 pub struct UnlockRoute<'a, 'c: 'a, T: Write = TcpStream> {
     context: &'a mut ServerContext<'c, T>,
+    id: Option<uuid::Uuid>,
 }
 
 impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
@@ -24,7 +25,28 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
     const METHOD: Method = Method::POST;
 
     fn new(context: &'a mut ServerContext<'c, T>) -> Self {
-        Self { context }
+        Self { context, id: None }
+    }
+
+    fn context(&mut self) -> &mut ServerContext<'c, T> {
+        self.context
+    }
+
+    fn post_run(&mut self, response: &Response) -> Result<(), Error> {
+        let id = self.id.ok_or(Error::new(
+            ErrorKind::Server,
+            Some("Missing id in unlock route"),
+        ))?;
+        if response.status() == Status::Ok {
+            self.context.state().commit_nonce_update(id);
+            if let Some(backend) = self.context.backend() {
+                backend.unlock()?;
+            }
+        } else {
+            self.context.state().rollback_nonce_update(id);
+        }
+
+        Ok(())
     }
     fn run(&mut self, req: &Request) -> Result<Response, Error> {
         trace!("Parsing unlock request");
@@ -87,11 +109,9 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
                     unlock_req.verify(&signature_bytes[..signature_length], &pubkey)?;
 
                 let id = uuid::Uuid::try_parse_ascii(unlock_req.id())?;
-                let valid_request = signature_valid
-                    && self
-                        .context
-                        .state()
-                        .validate_and_update_nonce(&id, unlock_req.nonce());
+                self.id = Some(id);
+                let valid_request =
+                    signature_valid && self.context.state().validate_nonce(&id, unlock_req.nonce());
 
                 if valid_request {
                     Ok(builder.status(Status::Ok).build())

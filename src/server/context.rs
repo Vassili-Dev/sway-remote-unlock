@@ -4,6 +4,7 @@ use std::sync::mpsc::Receiver;
 use remote_unlock_lib::enrollment_code::EnrollmentCode;
 use remote_unlock_lib::prelude::*;
 
+use crate::backends::swaylock::SwaylockBackend;
 use crate::logging;
 use crate::state::State;
 
@@ -12,6 +13,7 @@ pub struct ServerContext<'a, T: Write> {
     code_receiver: Receiver<EnrollmentCode>,
     config: &'a Config,
     stream: Option<T>,
+    backend: Option<SwaylockBackend>,
 }
 
 impl<'a, T: Write> ServerContext<'a, T> {
@@ -69,9 +71,20 @@ impl<'a, T: Write> ServerContext<'a, T> {
         Ok(())
     }
 
+    fn register_backend(&mut self) -> Result<(), Error> {
+        let swaylock_backend = SwaylockBackend::try_new(self.config)?;
+        self.backend.replace(swaylock_backend);
+        Ok(())
+    }
+
+    pub fn backend(&self) -> Option<&SwaylockBackend> {
+        self.backend.as_ref()
+    }
+
     pub fn init(&mut self) -> Result<(), Error> {
         logging::Logger::init(self.config)?;
         self.create_storage_dirs()?;
+        self.register_backend()?;
         Ok(())
     }
 
@@ -141,6 +154,7 @@ impl<'a, T: Write> ServerContextBuilder<'a, T> {
             config: self
                 .config
                 .ok_or(Error::new(ErrorKind::Server, Some("Config not set")))?,
+            backend: None,
             stream: self.stream,
         })
     }

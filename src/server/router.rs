@@ -43,9 +43,16 @@ impl Router {
             .unwrap_or(Response::new(Status::InternalServerError));
 
         trace!("Writing response to stream");
-        resp.to_writer(context.stream()?)?;
+        route.write_response(&resp)?;
 
         trace!("Response sent");
+        match route.post_run(&resp) {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Failed to run post route: {}", e);
+            }
+        }
+
         Ok(())
     }
 }

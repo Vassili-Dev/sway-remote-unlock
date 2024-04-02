@@ -51,6 +51,10 @@ impl<const HV: usize> Response<HV> {
         ResponseBuilder::new()
     }
 
+    pub fn status(&self) -> Status {
+        self.status
+    }
+
     pub fn add_header(&mut self, name: &'static str, value: &'static str) -> Result<(), Error> {
         for header in self.headers.iter_mut() {
             match header {

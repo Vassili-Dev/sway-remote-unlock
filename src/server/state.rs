@@ -7,6 +7,7 @@ pub struct State {
     // Map of strictly increasing nonces for each client
     nonces: HashMap<uuid::Uuid, u128>,
     code_buffer: CodeBuffer,
+    pending_nonce_updates: HashMap<uuid::Uuid, u128>,
 }
 
 impl State {
@@ -14,6 +15,7 @@ impl State {
         State {
             nonces: HashMap::new(),
             code_buffer: CodeBuffer::new(),
+            pending_nonce_updates: HashMap::new(),
         }
     }
 
@@ -92,7 +94,7 @@ impl State {
         }
     }
 
-    pub fn validate_and_update_nonce(&mut self, id: &uuid::Uuid, nonce: u128) -> bool {
+    pub fn validate_nonce(&mut self, id: &uuid::Uuid, nonce: u128) -> bool {
         trace!("Checking nonce for id: {}", &id);
         let current_nonce = match self.nonces.get(id) {
             Some(last_nonce) => last_nonce.to_owned(),
@@ -100,28 +102,46 @@ impl State {
                 debug!("No nonce found for id: {}, fetching from file", &id);
                 let loaded_nonce = self.try_load_nonce_from_file(&Config::new(), id);
 
-                match loaded_nonce {
-                    Ok(loaded_nonce) => {
-                        // self.update_nonce(*id, loaded_nonce);
-                        loaded_nonce
-                    }
-                    Err(_) => 0,
-                }
+                loaded_nonce.unwrap_or(0)
             }
         };
 
         let result = nonce >= current_nonce;
 
-        if result {
-            trace!("Updating nonce for id: {}", &id);
-            self.update_nonce(*id, nonce + 1);
-        } else {
+        if !result {
             warn!("Invalid nonce for id: {}", &id);
-            trace!("Synchronizing nonce for id: {}", &id);
-            self.update_nonce(*id, current_nonce);
+        }
+
+        trace!("Synchronizing nonce for id: {}", &id);
+        self.update_nonce(*id, current_nonce);
+
+        if result {
+            return self
+                .queue_nonce_update(*id, nonce + 1)
+                .map(|_| true)
+                .unwrap_or(false);
         }
 
         result
+    }
+
+    pub fn commit_nonce_update(&mut self, id: uuid::Uuid) {
+        trace!("Committing nonce update for id: {}", &id);
+        if let Some(nonce) = self.pending_nonce_updates.remove(&id) {
+            self.update_nonce(id, nonce);
+        }
+    }
+
+    pub fn rollback_nonce_update(&mut self, id: uuid::Uuid) {
+        trace!("Rolling back nonce update for id: {}", &id);
+        self.pending_nonce_updates.remove(&id);
+    }
+
+    fn queue_nonce_update(&mut self, id: uuid::Uuid, nonce: u128) -> Result<(), Error> {
+        trace!("Queueing nonce update for id: {}", &id);
+        self.pending_nonce_updates.insert(id, nonce);
+
+        Ok(())
     }
 
     pub fn code_buffer(&mut self) -> &mut CodeBuffer {

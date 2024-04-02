@@ -22,4 +22,20 @@ impl<'a, 'c: 'a> Routes<'a, 'c> {
             Routes::Unlock(route) => route.run(request),
         }
     }
+
+    pub fn write_response(&mut self, response: &Response) -> Result<(), Error> {
+        match self {
+            Routes::Enroll(route) => route.write_response(response),
+            Routes::NotFound(route) => route.write_response(response),
+            Routes::Unlock(route) => route.write_response(response),
+        }
+    }
+
+    pub fn post_run(&mut self, response: &Response) -> Result<(), Error> {
+        match self {
+            Routes::Enroll(route) => route.post_run(response),
+            Routes::NotFound(route) => route.post_run(response),
+            Routes::Unlock(route) => route.post_run(response),
+        }
+    }
 }

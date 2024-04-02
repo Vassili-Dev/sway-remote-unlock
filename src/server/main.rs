@@ -6,6 +6,7 @@ use remote_unlock_lib::prelude::*;
 use std::net::TcpListener;
 use std::sync::mpsc;
 
+mod backends;
 mod code_buffer;
 mod context;
 mod logging;

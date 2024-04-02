@@ -28,6 +28,8 @@ pub enum ErrorKind {
     CodeBufferFull,
     KeyExists,
     ContentLengthMismatch,
+    NonceQueueFull,
+    SwaylockBackend,
 }
 
 impl Error {
@@ -47,6 +49,8 @@ impl Display for ErrorKind {
             ErrorKind::KeyExists => write!(f, "Key exists"),
             ErrorKind::UnkownStatus => write!(f, "Unknown status"),
             ErrorKind::ContentLengthMismatch => write!(f, "Content length mismatch"),
+            ErrorKind::NonceQueueFull => write!(f, "Nonce queue full"),
+            ErrorKind::SwaylockBackend => write!(f, "Swaylock backend error"),
         }
     }
 }

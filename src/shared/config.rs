@@ -1,4 +1,7 @@
+use crate::types::{Error, ErrorKind};
+use log::warn;
 use std::{
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -15,6 +18,10 @@ const ENV_SERVER_HOSTNAME: &str = "REMOTE_UNLOCK_SERVER_HOSTNAME";
 const ENV_SERVER_PORT: &str = "REMOTE_UNLOCK_SERVER_PORT";
 const ENV_LOG_LEVEL: &str = "REMOTE_UNLOCK_LOG_LEVEL";
 
+// Backend Specific Config
+const ENV_SWAY_SOCKET_PATH: &str = "SWAYSOCK";
+// const DEFAULT_SWAY_SOCKET_DIR: &str = "/run/user/1000/sway-ipc.1000.1000.sock";
+
 #[cfg(debug_assertions)]
 const ENV_GENERATED_KEYS_DIR: &str = "REMOTE_UNLOCK_GENERATED_KEYS_DIR";
 
@@ -24,6 +31,7 @@ pub struct Config {
     server_hostname: Option<String>,
     server_port: Option<u16>,
     log_level: Option<log::LevelFilter>,
+    sway_socket_path: Option<String>,
     #[cfg(debug_assertions)]
     generated_keys_dir: Option<String>,
 }
@@ -48,6 +56,8 @@ impl Config {
             log::LevelFilter::from_str(level.as_str()).unwrap_or(log::LevelFilter::Info)
         });
 
+        let sway_socket_path = std::env::var(ENV_SWAY_SOCKET_PATH).ok();
+
         #[cfg(debug_assertions)]
         let generated_keys_dir = std::env::var(ENV_GENERATED_KEYS_DIR).ok();
 
@@ -57,8 +67,56 @@ impl Config {
             server_hostname,
             server_port,
             log_level,
+            sway_socket_path,
             #[cfg(debug_assertions)]
             generated_keys_dir,
+        }
+    }
+
+    fn try_detect_sway_socket_path() -> Option<PathBuf> {
+        let uid = match std::fs::metadata("/proc/self").map(|m| m.uid()) {
+            Ok(uid) => uid,
+            Err(_) => return None,
+        };
+        std::fs::read_dir("/run/user")
+            .and_then(|mut entries| {
+                let first_sock = entries.find(|entry| {
+                    entry
+                        .as_ref()
+                        .map(|entry| {
+                            entry
+                                .file_name()
+                                .to_str()
+                                .map(|name| name.starts_with(format!("sway-ipc.{}.", uid).as_str()))
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(false)
+                });
+
+                match first_sock {
+                    Some(entry) => Ok(entry.ok().map(|entry| entry.path())),
+                    None => Ok(None),
+                }
+            })
+            .unwrap_or(None)
+    }
+
+    pub fn sway_socket_path(&self) -> Result<PathBuf, Error> {
+        match self.sway_socket_path {
+            Some(ref path) => Ok(path.into()),
+            None => {
+                warn!("SWAYSOCK environment variable not set, attempting to construct path");
+                match Self::try_detect_sway_socket_path() {
+                    Some(path) => Ok(path),
+                    None => {
+                        warn!("Failed to detect sway socket path");
+                        Err(Error::new(
+                            ErrorKind::SwaylockBackend,
+                            Some("Failed to detect sway socket path"),
+                        ))
+                    }
+                }
+            }
         }
     }
 

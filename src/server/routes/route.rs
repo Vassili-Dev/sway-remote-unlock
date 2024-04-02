@@ -11,8 +11,16 @@ pub trait Route<'a, 'c: 'a, T: Write> {
     const METHOD: Method;
 
     fn run(&mut self, request: &Request) -> Result<Response, Error>;
+    fn context(&mut self) -> &mut ServerContext<'c, T>;
+
+    fn post_run(&mut self, response: &Response) -> Result<(), Error>;
 
     fn new(context: &'a mut ServerContext<'c, T>) -> Self;
+
+    fn write_response(&mut self, response: &Response) -> Result<(), Error> {
+        response.to_writer(self.context().stream()?)?;
+        Ok(())
+    }
 
     fn match_route(request: &Request) -> Result<bool, Error> {
         let path = request

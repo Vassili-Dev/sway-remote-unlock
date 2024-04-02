@@ -23,6 +23,14 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for NotFound<'a, 'c, T> {
         Self { _context: context }
     }
 
+    fn context(&mut self) -> &mut ServerContext<'c, T> {
+        self._context
+    }
+
+    fn post_run(&mut self, _response: &Response) -> Result<(), Error> {
+        Ok(())
+    }
+
     fn run(&mut self, _req: &Request) -> Result<Response, Error> {
         warn!("Invalid route requested");
         let mut response = Response::new(Status::NotFound);
