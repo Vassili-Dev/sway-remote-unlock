@@ -21,7 +21,6 @@ const ENV_LOG_LEVEL: &str = "REMOTE_UNLOCK_LOG_LEVEL";
 
 // Backend Specific Config
 const ENV_SWAY_SOCKET_PATH: &str = "SWAYSOCK";
-// const DEFAULT_SWAY_SOCKET_DIR: &str = "/run/user/1000/sway-ipc.1000.1000.sock";
 
 #[cfg(debug_assertions)]
 const ENV_GENERATED_KEYS_DIR: &str = "REMOTE_UNLOCK_GENERATED_KEYS_DIR";
