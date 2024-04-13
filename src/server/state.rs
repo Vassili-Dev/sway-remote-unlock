@@ -113,7 +113,6 @@ impl State {
         }
 
         trace!("Synchronizing nonce for id: {}", &id);
-        self.update_nonce(*id, current_nonce);
 
         if result {
             return self
