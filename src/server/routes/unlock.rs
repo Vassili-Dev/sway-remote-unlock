@@ -38,10 +38,8 @@ impl<'a, 'c: 'a, T: Write> Route<'a, 'c, T> for UnlockRoute<'a, 'c, T> {
             Some("Missing id in unlock route"),
         ))?;
         if response.status() == Status::Ok {
+            self.context.unlock()?;
             self.context.state().commit_nonce_update(id);
-            if let Some(backend) = self.context.backend() {
-                backend.unlock()?;
-            }
         } else {
             self.context.state().rollback_nonce_update(id);
         }

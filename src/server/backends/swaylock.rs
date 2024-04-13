@@ -1,22 +1,27 @@
-use std::path::PathBuf;
-
+use evdev::{
+    uinput::{VirtualDevice, VirtualDeviceBuilder},
+    AttributeSet,
+};
 use remote_unlock_lib::prelude::*;
 
 pub struct SwaylockBackend {
-    sway_socket_path: PathBuf,
+    waker: VirtualDevice,
 }
 
 impl SwaylockBackend {
-    fn find_sway_socket(config: &Config) -> Result<PathBuf, Error> {
-        let sway_socket_path = config.sway_socket_path()?;
-        Ok(sway_socket_path)
-    }
-    pub fn try_new(config: &Config) -> Result<Self, Error> {
-        let sway_socket_path = Self::find_sway_socket(config)?;
-        Ok(Self { sway_socket_path })
+    pub fn try_new() -> Result<Self, Error> {
+        let mut keys = AttributeSet::new();
+        keys.insert(evdev::Key::KEY_WAKEUP);
+
+        let waker = VirtualDeviceBuilder::new()?
+            .name("RemoteUnlock--Waker")
+            .with_keys(&keys)?
+            .build()?;
+
+        Ok(Self { waker })
     }
 
-    pub fn unlock(&self) -> Result<(), Error> {
+    pub fn unlock(&mut self) -> Result<(), Error> {
         self.unlock_swaylock()?;
         self.wake_screen()
     }
@@ -42,36 +47,22 @@ impl SwaylockBackend {
         }
     }
 
-    fn wake_screen(&self) -> Result<(), Error> {
+    fn wake_screen(&mut self) -> Result<(), Error> {
         trace!("Waking screen");
 
-        let socket_path = self
-            .sway_socket_path
-            .as_os_str()
-            .to_str()
-            .ok_or(Error::new(
-                ErrorKind::SwaylockBackend,
-                Some("Failed to convert sway socket path to string"),
-            ))?;
+        trace!("Sending lid open key");
 
-        debug!("Using sway socket path: {:x?}", socket_path.as_bytes());
+        let wake_down = evdev::InputEvent::new(evdev::EventType::KEY, evdev::Key::KEY_WAKEUP.0, 1);
+        let wake_up = evdev::InputEvent::new(evdev::EventType::KEY, evdev::Key::KEY_WAKEUP.0, 0);
 
-        trace!("Using sway socket path: {}", socket_path);
-        let wake_result = std::process::Command::new("swaymsg")
-            .arg("-s")
-            .arg(socket_path)
-            .arg("output * dpms on")
-            .output()?;
+        match self.waker.emit(&[wake_down, wake_up]) {
+            Ok(_) => (),
+            Err(e) => {
+                debug!("Wakeup result: {}", e);
+                return Ok(());
+            }
+        };
 
-        if wake_result.status.success() {
-            trace!("Screen woken");
-            Ok(())
-        } else {
-            error!("Failed to wake screen: {:?}", wake_result);
-            Err(Error::new(
-                ErrorKind::SwaylockBackend,
-                Some("Failed to wake screen"),
-            ))
-        }
+        Ok(())
     }
 }

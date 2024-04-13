@@ -1,4 +1,5 @@
 use crate::types::{Error, ErrorKind};
+use evdev::Device;
 use log::warn;
 use std::{
     os::unix::fs::MetadataExt,
@@ -30,6 +31,7 @@ pub struct Config {
     storage_dir: Option<String>,
     server_hostname: Option<String>,
     server_port: Option<u16>,
+    wake_device_path: Option<PathBuf>,
     log_level: Option<log::LevelFilter>,
     sway_socket_path: Option<String>,
     #[cfg(debug_assertions)]
@@ -56,6 +58,8 @@ impl Config {
             log::LevelFilter::from_str(level.as_str()).unwrap_or(log::LevelFilter::Info)
         });
 
+        let wake_device_path = Self::try_detect_wake_device_path();
+
         let sway_socket_path = std::env::var(ENV_SWAY_SOCKET_PATH).ok();
 
         #[cfg(debug_assertions)]
@@ -68,8 +72,26 @@ impl Config {
             server_port,
             log_level,
             sway_socket_path,
+            wake_device_path,
             #[cfg(debug_assertions)]
             generated_keys_dir,
+        }
+    }
+
+    fn try_detect_wake_device_path() -> Option<PathBuf> {
+        let mut devices = evdev::enumerate();
+        let lid_device = devices.find(|(_, device)| {
+            device
+                .supported_keys()
+                .map_or(false, |keys| keys.contains(evdev::Key::KEY_WAKEUP))
+        });
+
+        match lid_device {
+            Some((pb, _)) => Some(pb),
+            None => {
+                warn!("Failed to detect lid device");
+                None
+            }
         }
     }
 
@@ -117,6 +139,16 @@ impl Config {
                     }
                 }
             }
+        }
+    }
+
+    pub fn wake_device(&self) -> Option<Device> {
+        match &self.wake_device_path {
+            Some(path) => {
+                let device = Device::open(path).ok();
+                device
+            }
+            None => None,
         }
     }
 

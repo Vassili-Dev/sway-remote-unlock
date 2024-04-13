@@ -59,6 +59,7 @@ impl<'a, T: Write> ServerContext<'a, T> {
             "Creating keys directory: {}",
             keys_dir.to_str().unwrap_or("Malformed path")
         );
+
         std::fs::create_dir_all(keys_dir)?;
 
         let nonce_dir = self.config.nonce_dir();
@@ -72,13 +73,21 @@ impl<'a, T: Write> ServerContext<'a, T> {
     }
 
     fn register_backend(&mut self) -> Result<(), Error> {
-        let swaylock_backend = SwaylockBackend::try_new(self.config)?;
+        let swaylock_backend = SwaylockBackend::try_new()?;
         self.backend.replace(swaylock_backend);
         Ok(())
     }
 
-    pub fn backend(&self) -> Option<&SwaylockBackend> {
-        self.backend.as_ref()
+    pub fn unlock(&mut self) -> Result<(), Error> {
+        self.backend
+            .as_mut()
+            .ok_or(Error::new(
+                ErrorKind::Server,
+                Some("Backend not initialized"),
+            ))?
+            .unlock()?;
+
+        Ok(())
     }
 
     pub fn init(&mut self) -> Result<(), Error> {
