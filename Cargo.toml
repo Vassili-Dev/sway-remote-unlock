@@ -24,6 +24,7 @@ der = { version = "0.7.8", features = ["derive", "oid", "pem"] }
 evdev = "0.12.1"
 httparse = "1.8.0"
 log = "0.4.21"
+mdns-sd = "0.10.5"
 p256 = { version = "0.13.2", features = [
     "ecdsa",
     "ecdsa-core",

@@ -15,9 +15,10 @@ const DEFAULT_GENERATED_KEYS_DIR: &str = "/tmp/remote_unlock_keys";
 
 const ENV_SOCKET_PATH: &str = "REMOTE_UNLOCK_SOCKET_PATH";
 const ENV_STORAGE_DIR: &str = "REMOTE_UNLOCK_STORAGE_DIR";
-const ENV_SERVER_HOSTNAME: &str = "REMOTE_UNLOCK_SERVER_HOSTNAME";
+const ENV_SERVER_IP: &str = "REMOTE_UNLOCK_SERVER_IP";
 const ENV_SERVER_PORT: &str = "REMOTE_UNLOCK_SERVER_PORT";
 const ENV_LOG_LEVEL: &str = "REMOTE_UNLOCK_LOG_LEVEL";
+const ENV_MDNS_SERVICE_TYPE: &str = "REMOTE_UNLOCK_MDNS_SERVICE_TYPE";
 
 // Backend Specific Config
 const ENV_SWAY_SOCKET_PATH: &str = "SWAYSOCK";
@@ -28,11 +29,13 @@ const ENV_GENERATED_KEYS_DIR: &str = "REMOTE_UNLOCK_GENERATED_KEYS_DIR";
 pub struct Config {
     socket_path: Option<String>,
     storage_dir: Option<String>,
-    server_hostname: Option<String>,
+    server_ip: Option<String>,
     server_port: Option<u16>,
     wake_device_path: Option<PathBuf>,
     log_level: Option<log::LevelFilter>,
     sway_socket_path: Option<String>,
+    service_type: Option<String>,
+
     #[cfg(debug_assertions)]
     generated_keys_dir: Option<String>,
 }
@@ -48,7 +51,7 @@ impl Config {
 
         let storage_dir = std::env::var(ENV_STORAGE_DIR).ok();
 
-        let server_hostname = std::env::var(ENV_SERVER_HOSTNAME).ok();
+        let server_ip = std::env::var(ENV_SERVER_IP).ok();
         let server_port = std::env::var(ENV_SERVER_PORT)
             .ok()
             .map(|port| port.parse::<u16>().unwrap());
@@ -59,6 +62,8 @@ impl Config {
 
         let wake_device_path = Self::try_detect_wake_device_path();
 
+        let service_type = std::env::var(ENV_MDNS_SERVICE_TYPE).ok();
+
         let sway_socket_path = std::env::var(ENV_SWAY_SOCKET_PATH).ok();
 
         #[cfg(debug_assertions)]
@@ -67,11 +72,12 @@ impl Config {
         Config {
             socket_path,
             storage_dir,
-            server_hostname,
+            server_ip,
             server_port,
             log_level,
             sway_socket_path,
             wake_device_path,
+            service_type,
             #[cfg(debug_assertions)]
             generated_keys_dir,
         }
@@ -93,7 +99,6 @@ impl Config {
             }
         }
     }
-
     fn try_detect_sway_socket_path() -> Option<PathBuf> {
         let uid = match std::fs::metadata("/proc/self").map(|m| m.uid()) {
             Ok(uid) => uid,
@@ -173,6 +178,17 @@ impl Config {
         Path::new(self.storage_dir()).join("nonces")
     }
 
+    pub fn service_type(&self) -> &str {
+        match &self.service_type {
+            Some(service_type) => service_type,
+            None => "_remote-unlock._tcp.local.",
+        }
+    }
+
+    pub fn server_hostname(&self) -> &str {
+        include_str!("/etc/hostname").trim()
+    }
+
     #[cfg(debug_assertions)]
     pub fn generated_keys_dir(&self) -> &str {
         match &self.generated_keys_dir {
@@ -181,10 +197,10 @@ impl Config {
         }
     }
 
-    pub fn server_hostname(&self) -> &str {
-        match &self.server_hostname {
-            Some(hostname) => hostname,
-            None => "127.0.0.1",
+    pub fn server_ip(&self) -> &str {
+        match &self.server_ip {
+            Some(server_ip) => server_ip,
+            None => "0.0.0.0",
         }
     }
 

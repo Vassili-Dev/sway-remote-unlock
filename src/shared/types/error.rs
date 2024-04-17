@@ -14,6 +14,7 @@ pub enum Error {
     SignatureDecodeError(base64::DecodeSliceError),
     UuidError(uuid::Error),
     ByteArrayError(ByteArrayError),
+    MDNSDaemon(mdns_sd::Error),
     OwnError(OwnError<ErrorKind>),
     Utf8Error(std::str::Utf8Error),
 }
@@ -97,6 +98,9 @@ impl std::fmt::Display for Error {
             }
             Self::Utf8Error(e) => {
                 write!(f, "Utf8Error: {}", e)
+            }
+            Self::MDNSDaemon(e) => {
+                write!(f, "MDNSDaemon: {}", e)
             }
             Self::UuidError(e) => {
                 write!(f, "UuidError: {}", e)
@@ -183,5 +187,11 @@ impl From<ByteArrayError> for Error {
 impl From<uuid::Error> for Error {
     fn from(err: uuid::Error) -> Self {
         Self::UuidError(err)
+    }
+}
+
+impl From<mdns_sd::Error> for Error {
+    fn from(err: mdns_sd::Error) -> Self {
+        Self::MDNSDaemon(err)
     }
 }

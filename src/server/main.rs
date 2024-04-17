@@ -9,6 +9,7 @@ use std::sync::mpsc;
 mod backends;
 mod code_buffer;
 mod context;
+mod discovery;
 mod logging;
 mod router;
 mod routes;
@@ -22,6 +23,7 @@ fn main() -> Result<(), Error> {
     let (sock_sender, server_recv) = mpsc::channel::<EnrollmentCode>();
 
     let sock_handle = socket::run_socket(sock_sender)?;
+    let discovery = discovery::start_discovery_daemon(&config)?;
 
     let mut context = context::ServerContext::builder()
         .config(&config)
@@ -32,11 +34,10 @@ fn main() -> Result<(), Error> {
     context.init()?;
 
     debug!("Starting server");
-    let listener: TcpListener =
-        TcpListener::bind((config.server_hostname(), config.server_port()))?;
+    let listener: TcpListener = TcpListener::bind((config.server_ip(), config.server_port()))?;
     info!(
         "Server started on {}:{}",
-        config.server_hostname(),
+        config.server_ip(),
         config.server_port()
     );
 
@@ -75,6 +76,7 @@ fn main() -> Result<(), Error> {
 
     info!("Shutting down server");
     sock_handle.join().unwrap();
+    discovery.shutdown().unwrap();
 
     Ok(())
 }
