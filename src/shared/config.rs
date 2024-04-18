@@ -105,7 +105,7 @@ impl Config {
             Err(_) => return None,
         };
         std::fs::read_dir("/run/user")
-            .and_then(|mut entries| {
+            .map(|mut entries| {
                 let first_sock = entries.find(|entry| {
                     entry
                         .as_ref()
@@ -120,8 +120,8 @@ impl Config {
                 });
 
                 match first_sock {
-                    Some(entry) => Ok(entry.ok().map(|entry| entry.path())),
-                    None => Ok(None),
+                    Some(entry) => entry.ok().map(|entry| entry.path()),
+                    None => None,
                 }
             })
             .unwrap_or(None)
@@ -148,10 +148,7 @@ impl Config {
 
     pub fn wake_device(&self) -> Option<Device> {
         match &self.wake_device_path {
-            Some(path) => {
-                let device = Device::open(path).ok();
-                device
-            }
+            Some(path) => Device::open(path).ok(),
             None => None,
         }
     }
