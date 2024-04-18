@@ -3,6 +3,7 @@ use remote_unlock_lib::{
     net::{request::Request, response::Response, status::Status},
     prelude::*,
 };
+use std::os::unix::fs::PermissionsExt;
 use std::{
     os::unix::net::UnixListener,
     sync::mpsc::Sender,
@@ -22,6 +23,14 @@ pub fn run_socket(code_channel_sender: Sender<EnrollmentCode>) -> Result<JoinHan
     let handle = thread::spawn(move || {
         let config = Config::new();
         let sock: UnixListener = open_socket(config.socket_path()).unwrap();
+
+        // Change permissions of socket to 777
+        // TODO: Review if this is secure or wanted behaviour
+        let mut perms = std::fs::metadata(config.socket_path())
+            .unwrap()
+            .permissions();
+        perms.set_mode(0o777);
+        std::fs::set_permissions(config.socket_path(), perms).unwrap();
 
         for stream in sock.incoming() {
             let mut stream = stream.unwrap();
